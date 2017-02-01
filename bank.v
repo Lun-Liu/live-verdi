@@ -51,22 +51,30 @@ Definition account_eq_dec : forall a a' : Account, {a = a'} + {a <> a'}.
   decide equality.
 Defined.  
   
-Fixpoint add_value (carrylist : list Record) (records : list Record) (a : Account) (v : Value) : list Record :=
+Fixpoint add_value (carrylist : list Record) (records : list Record) 
+                   (a : Account) (v : Value) : list Record :=
   match records with
-  | x::l1 => if (account_eq_dec (get_account x) a) then (app carrylist (re (get_account x) ((get_value x) + v)::l1)) else add_value (app carrylist [x]) l1 a v
+  | x::l1 => if (account_eq_dec (get_account x) a) 
+             then (app carrylist (re (get_account x) ((get_value x) + v)::l1)) 
+             else add_value (app carrylist [x]) l1 a v
   | [] => app carrylist [re a v]
   end.
   
   
-Fixpoint sub_value (carrylist : list Record) (records : list Record) (a : Account) (v : Value) : list Record :=
+Fixpoint sub_value (carrylist : list Record) (records : list Record) 
+                   (a : Account) (v : Value) : list Record :=
   match records with
-  | x::l1 => if (account_eq_dec (get_account x) a) then (app carrylist (re (get_account x) ((get_value x) - v)::l1)) else sub_value (app carrylist [x]) l1 a v
+  | x::l1 => if (account_eq_dec (get_account x) a) 
+             then (app carrylist (re (get_account x) ((get_value x) - v)::l1)) 
+             else sub_value (app carrylist [x]) l1 a v
   | [] => app carrylist [re a (0-v)]
   end.
   
 Fixpoint lookup (records : list Record) (a : Account) : Msg :=
   match records with
-  | x::l1 => if (account_eq_dec (get_account x) a) then ResponseMsg (get_account x) (get_value x) else lookup l1 a 
+  | x::l1 => if (account_eq_dec (get_account x) a) 
+             then ResponseMsg (get_account x) (get_value x) 
+             else lookup l1 a 
   | [] => ResponseMsg 0 0
   end.
   
@@ -109,7 +117,6 @@ Definition InputHandler (nm : Name) (i : Input) : Handler Data :=
     | Client => ClientIOHandler i
     | Server   => ServerIOHandler i
   end.
-
 
 
 
