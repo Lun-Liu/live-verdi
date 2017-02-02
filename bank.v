@@ -9,12 +9,16 @@ Inductive Name :=
 | Server : Name.
 
 Inductive Msg :=
+| CreateMsg : Account -> Msg
 | AddMsg : Account -> Value -> Msg
 | SubstractMsg : Account -> Value -> Msg
 | LookupMsg : Account -> Msg
+| SucceedMsg : Msg
+| FailMsg : Msg
 | ResponseMsg: Account -> Value -> Msg.
 
 Inductive Input := 
+| Create : Account -> Value -> Input
 | Add : Account -> Value -> Input
 | Substract : Account -> Value -> Input
 | Lookup : Account -> Input.
@@ -41,6 +45,8 @@ Definition get_value (r : Record) : Value :=
     | Server => Some []
     | Client => None
   end.*)
+  
+Inductive ClientState := init.
   
 Record Data := mkData { records : list Record; c : unit}.
 Definition initData := mkData [] tt.
