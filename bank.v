@@ -1,6 +1,12 @@
 Require Import Verdi.Verdi.
 Require Import Verdi.HandlerMonad.
 
+Require Import
+  Coq.FSets.FMapList
+  Coq.Structures.OrderedTypeEx.
+
+Module Import M := FMapList.Make(Nat_as_OT).
+
 Definition Account := nat.
 Definition Value := nat.
 
@@ -18,14 +24,16 @@ Inductive Msg :=
 | ResponseMsg: Account -> Value -> Msg.
 
 Inductive Input := 
-| Create : Account -> Value -> Input
+| Create : Account -> Input
 | Add : Account -> Value -> Input
 | Substract : Account -> Value -> Input
 | Lookup : Account -> Input.
 
 Inductive Output := Response.
 
-Inductive Record := 
+(*No need for those, use FMap library instead*)
+
+(*Inductive Record := 
 | re : Account -> Value -> Record.
 
 Definition get_account (r : Record) : Account :=
@@ -36,7 +44,7 @@ Definition get_account (r : Record) : Account :=
 Definition get_value (r : Record) : Value :=
   match r with
   | re a v => v
-  end.
+  end.*)
 
 (*Definition State := option (list Record).*)
 
@@ -46,32 +54,22 @@ Definition get_value (r : Record) : Value :=
     | Client => None
   end.*)
   
-Inductive ClientState := init.
   
-Record Data := mkData { records : list Record; c : unit}.
-Definition initData := mkData [] tt.
-  
-
-(* what does this mean???*)
-Definition account_eq_dec : forall a a' : Account, {a = a'} + {a <> a'}.
-  decide equality.
-Defined.  
-  
-Fixpoint add_value (carrylist : list Record) (records : list Record) 
-                   (a : Account) (v : Value) : list Record :=
+(*Fixpoint add_value (carrylist : list Record) (records : list Record) 
+                   (a : Account) (v : Value) : Handler Data :=
   match records with
   | x::l1 => if (account_eq_dec (get_account x) a) 
-             then (app carrylist (re (get_account x) ((get_value x) + v)::l1)) 
+             then (app carrylist (re (get_account x) ((get_value x) + v)::l1))
              else add_value (app carrylist [x]) l1 a v
   | [] => app carrylist [re a v]
   end.
-  
-  
+
+
 Fixpoint sub_value (carrylist : list Record) (records : list Record) 
                    (a : Account) (v : Value) : list Record :=
   match records with
   | x::l1 => if (account_eq_dec (get_account x) a) 
-             then (app carrylist (re (get_account x) ((get_value x) - v)::l1)) 
+             then (app carrylist (re (get_account x) ((get_value x) - v)::l1))
              else sub_value (app carrylist [x]) l1 a v
   | [] => app carrylist [re a (0-v)]
   end.
@@ -82,31 +80,74 @@ Fixpoint lookup (records : list Record) (a : Account) : Msg :=
              then ResponseMsg (get_account x) (get_value x) 
              else lookup l1 a 
   | [] => ResponseMsg 0 0
-  end.
+  end.*)
   
+  
+Inductive ClientState := init | wait | succeeded | failed.
+  
+Record Data := mkData { records : M.t nat; c : ClientState}.
+Definition initData := mkData (M.empty nat) init.
+  
+
+Definition account_eq_dec : forall a a' : Account, {a = a'} + {a <> a'}.
+  decide equality.
+Defined.  
+
+Definition value_eq_dec : forall v v' : Value, {v = v'} + {v <> v'}.
+  decide equality.
+Defined.  
+
   
 Definition Handler (S : Type) := GenHandler (Name * Msg) S Output unit.
 
 Definition ClientNetHandler (m : Msg) : Handler Data := 
+  st <- get ;;
+  let r := records st in
   match m with
-    | ResponseMsg a v => nop
+    | SucceedMsg => put (mkData r succeeded)
+    | FailMsg => put (mkData r failed)
+    | ResponseMsg a v => put (mkData r succeeded)
     | _ => nop
   end.
 
 Definition ClientIOHandler (i : Input) : Handler Data :=
+  st <- get ;;
+  let r  := records st in
+  put (mkData r wait);;
   match i with
+    | Create a  => send (Server, CreateMsg a) 
     | Add a v => send (Server, AddMsg a v)
     | Substract a v => send (Server, SubstractMsg a v)
     | Lookup a => send (Server, LookupMsg a)
   end.
 
+
 Definition ServerNetHandler( m : Msg) : Handler Data :=
   st <- get ;;
   let r := records st in
+  let c := c st in
   match m with
-    | AddMsg a v => put (mkData (add_value [] r a v) tt) 
-    | SubstractMsg a v => put (mkData (sub_value [] r a v) tt)
-    | LookupMsg a => send (Client, lookup r a)
+    | CreateMsg a => 
+      match M.find a r with
+      | Some v => send (Client, FailMsg)
+      | None => put (mkData (M.add a 0 r) c) >> send (Client, SucceedMsg)
+      end
+    | AddMsg a v => 
+      match M.find a r with
+      | Some v' => put (mkData (M.add a (v+v') r) c) >> send (Client, SucceedMsg)
+      | None => send (Client, FailMsg)
+      end
+    | SubstractMsg a v => 
+      match M.find a r with
+      | Some v' => if lt_dec v v' then send (Client, FailMsg)
+                   else put (mkData (M.add a (v-v') r) c) >> send (Client, SucceedMsg)
+      | None => send (Client, FailMsg)
+      end
+    | LookupMsg a => 
+      match M.find a r with
+      | Some v' => send (Client, ResponseMsg a v')
+      | None => send (Client, FailMsg)
+      end
     | _ => nop
   end.
 
