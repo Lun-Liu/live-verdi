@@ -1,0 +1,7 @@
+_build
+*.vo
+*.glob
+*.v.d
+*~
+*.aux
+*.vio
