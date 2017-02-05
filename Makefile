@@ -1,6 +1,6 @@
 OCAMLBUILD = ocamlbuild -package verdi-runtime -I ml -cflag -g
 
-BANK = Bank.v ExtractionBank.v
+BANK = Bank.v ExtractBank.v
 
 default: bank.native
 

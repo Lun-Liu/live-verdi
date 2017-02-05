@@ -42,6 +42,7 @@ Section Bank.
   Defined.
 
   Inductive Input :=
+  | Timeout
   | Create    : Account -> Input
   | Deposit   : Account -> Value -> Input
   | Withdraw  : Account -> Value -> Input
@@ -76,6 +77,7 @@ Section Bank.
     let s := server state in (
       put (mkState wait s) ;;
       match i with
+      | Timeout          => put (mkState fail s)
       | Create   acc     => send (Server, req (CreateMsg   acc))
       | Deposit  acc val => send (Server, req (DepositMsg  acc val))
       | Withdraw acc val => send (Server, req (WithdrawMsg acc val))
@@ -176,5 +178,4 @@ Section Bank.
     net_handlers := NetHandler ;
     input_handlers := IOHandler
   }.
-
 End Bank.
