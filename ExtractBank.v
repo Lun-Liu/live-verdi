@@ -13,4 +13,4 @@ Require Import
   Verdi.ExtrOcamlBool
   Verdi.ExtrOcamlList.
 
-Extraction "Bank_Coq.ml" seq bank_base_params bank_multi_params.
+Extraction "Bank_Coq.ml" seq bank_base_params bank_multi_params failure_params.

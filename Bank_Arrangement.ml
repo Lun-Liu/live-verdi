@@ -1,6 +1,9 @@
 open Bank_Coq
+open Bank_Serialization
 
 open Obj
+open Printf
+open Util
 
 module type BankParams = sig
   val debug : bool
@@ -10,20 +13,25 @@ module DebugParams = struct
   let debug = true
 end
 
+module DefaultParams = struct
+  let debug = false
+end
+
 module BankArrangement (P : BankParams) = struct
-  type client_id = int
   type name = Bank_Coq.name
-  type msg = Bank_Coq.msg
+  type msg = Bank_Coq.netMsg
   type state = Bank_Coq.state
-  type input = Bank_Coq.input0
-  type output = Bank_Coq.output0
-
+  type input = Bank_Coq.netInput
+  type output = Bank_Coq.netOutput
   type res = (output list * state) * ((name * msg) list)
-  type task_handler = name -> state -> res
-  type timeout_setter = name -> state -> float
 
+  let reboot = Bank_Coq.reboot
   let systemName = "Distributed Banking System"
   let init (n : name) = magic (bank_multi_params.init_handlers (magic n))
+
+  type client_id = Bank_Coq.netId
+  let createClientId () = char_list_of_string (Uuidm.to_string (Uuidm.create `V4))
+  let serializeClientId (c : char list) = string_of_char_list c
 
   let handleIO (n : name) (i : input) (s : state) =
     magic (bank_multi_params.input_handlers (magic n) (magic i) (magic s))
@@ -34,24 +42,16 @@ module BankArrangement (P : BankParams) = struct
   let serializeMsg = Bank_Serialization.serializeMsg
   let deserializeInput = Bank_Serialization.deserializeInput
   let serializeOutput = Bank_Serialization.serializeOutput
-  let deserializeName = Bank_Serialization.deserializeName
-  let serializeName = Bank_Serialization.serializeName
-
-  let failMsg = Some (Resp FailMsg)
-  let newMsg = None
 
   let debug = P.debug
-  let debugRecv (s : state) ((n , m) : name * msg) = ()
-  let debugSend (s : state) ((n , m) : name * msg) = ()
-  let debugTimeout (s : state) = ()
-  let debugInput (s : state) (i : input) = ()
-
-  let createClientId () = let upper_bound = 1073741823 in Random.int upper_bound
-  let serializeClientId = string_of_int
+  let debugRecv = dbgSerializeComm Recv
+  let debugSend = dbgSerializeComm Send
+  let debugTimeout = dbgSerializeTimeout
+  let debugInput = dbgSerializeInput
 
   (* FIXME: Timeouts are arbitrary right now *)
-  let setTimeout _ s = Random.float 0.1
+  let setTimeout _ _ = Random.float 0.5
   let handleTimeout (n : name) (s : state) =
-    magic bank_multi_params.input_handlers (magic n) (magic Timeout) (magic s)
-  let timeoutTasks = []
+    magic (bank_multi_params.input_handlers
+               (magic n) (magic (NetI ([], Timeout))) (magic s))
 end

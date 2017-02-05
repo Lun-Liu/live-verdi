@@ -1,47 +1,62 @@
 open Bank_Coq
 
-open Obj
 open Printf
 open String
 open Str
+open Util
 
-(* FIXME: Need to pass client_id around to return here *)
-let serializeOutput (out : output0) : int * string =
-  match (magic out) with
-  | Failed                 -> (0, sprintf "FailResponse")
-  | Passed(account, value) -> (0, sprintf "PassResponse")
+let invalidInputMessage (c : netId) : netInput option =
+  print_endline ("[!] INVALID INPUT from " ^ (string_of_char_list c)) ; None
 
-(* FIXME: Is `c` useful? *)
-let deserializeInput (i : string) (c : int) : input0 option =
+let serializeOutput (out : netOutput) : char list * string =
+  match (Obj.magic out) with
+  | NetO(client, Failed)
+      -> (client, sprintf "FAIL\n")
+  | NetO(client, Passed (account, value))
+      -> (client, sprintf "PASS: %d %d\n" account value)
+
+let deserializeInput (i : string) (c : netId) : netInput option =
   let inp = String.trim i in
   let regex_2 = regexp "^\\([A-Z]+\\) +\\([0-9]+\\)$" in
   let regex_3 = regexp "^\\([A-Z]+\\) +\\([0-9]+\\) +\\([0-9]+\\)$" in
   if string_match regex_2 inp 0 then (
     match (matched_group 1 inp, matched_group 2 inp) with
-    | ("CREATE", account) -> Some (Create(int_of_string account))
-    | ("CHECK",  account) -> Some (Check (int_of_string account))
+    | ("CREATE", account) -> Some (NetI (c, Create (int_of_string account)))
+    | ("CHECK",  account) -> Some (NetI (c, Check (int_of_string account)))
     | _ -> (print_endline "Invalid Input" ; None)
   ) else if string_match regex_3 inp 0 then (
     match (matched_group 1 inp, matched_group 2 inp, matched_group 3 inp) with
-    | ("DEPOSIT",  account, value) -> Some (Deposit (int_of_string account,
-                                                     int_of_string value))
-    | ("WITHDRAW", account, value) -> Some (Withdraw(int_of_string account,
-                                                     int_of_string value))
-    | _ -> (print_endline "Invalid Input" ; None)
-  ) else (print_endline "Invalid Input" ; None)
+    | ("DEPOSIT",  account, value)
+        -> Some (NetI (c, Deposit (int_of_string account, int_of_string value)))
+    | ("WITHDRAW", account, value)
+        -> Some (NetI (c, Withdraw(int_of_string account, int_of_string value)))
+    | _ -> invalidInputMessage c
+  ) else invalidInputMessage c
 
-let serializeMsg (m : msg) : string = Marshal.to_string m []
+let serializeMsg (m : netMsg) : string = Marshal.to_string m []
 
-let deserializeMsg (s : string) : msg = Marshal.from_string s 0
+let deserializeMsg (s : string) : netMsg = Marshal.from_string s 0
 
-(* TODO: Needs changes when adding more clients / servers *)
+(* For debugging *)
 
-let serializeName (n : name) : string =
-  match n with
-  | Server -> "server"
-  | Client -> "client"
+type direction = Send | Recv
 
-let deserializeName (s : string) : name option =
-  if s = "server" then Some Server
-  else if s = "client" then Some Client
-  else None
+let serializeReqHumanReadable (rm : reqMsg) : string =
+  ""
+
+let serializeRespHumanReadable (rm : respMsg) : string =
+  ""
+
+let serializeMsgHumanReadable (nm : netMsg) : (string * string) =
+  let NetM (id, m) = nm in
+    ((string_of_char_list id),
+     (match m with Req rm  -> serializeReqHumanReadable rm
+                 | Resp rm -> serializeRespHumanReadable rm))
+
+let dbgSerializeComm (d : direction) (s : state) ((n , m) : name * netMsg) =
+  let (id, sm) = serializeMsgHumanReadable m in
+    print_endline ("  " ^ id ^ (if d = Send then " < " else " > ") ^ sm)
+
+let dbgSerializeInput (s : state) (i : netInput) = ()
+
+let dbgSerializeTimeout (s : state) = ()

@@ -1,3 +1,5 @@
+*.native
+*.d.byte
 _build
 *.vo
 *.glob
@@ -5,3 +7,4 @@ _build
 *~
 *.aux
 *.vio
+*_Coq.*

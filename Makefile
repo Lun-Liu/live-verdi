@@ -1,14 +1,20 @@
-OCAMLBUILD = ocamlbuild -package verdi-runtime -I ml -cflag -g
+OCAMLBUILD = ocamlbuild -package uuidm -package verdi-runtime \
+                        -I ml -cflags -g,-w,a,-color,always
 
 BANK = Bank.v ExtractBank.v
+BANK_COQ = Bank_Coq.ml
 
 default: bank.native
 
-bank: $(BANK)
+$(BANK_COQ): $(BANK)
 	coqc $(BANK)
 
-bank.native: bank
+bank.d.byte: $(BANK_COQ)
+	$(OCAMLBUILD) Bank.d.byte
+
+bank.native: $(BANK_COQ)
 	$(OCAMLBUILD) Bank.native
 
 clean:
-	rm -rf *.vo *.glob _build *.native *_Coq.ml*
+	$(OCAMLBUILD) -clean
+	rm -rf *.vo *.glob *_Coq.ml*
