@@ -21,7 +21,7 @@ Section Bank.
     decide equality.
   Defined.
 
-  Inductive Name := Client | Server.
+  Inductive Name := Agent | Server.
   Definition Name_eq_dec : forall n n' : Name, {n = n'} + {n <> n'}.
     decide equality.
   Defined.
@@ -51,24 +51,24 @@ Section Bank.
   | Failed
   | Passed : Account -> Value -> Output.
 
-  Inductive  ClientState := wait | pass | fail.
+  Inductive  AgentState  := wait | pass | fail.
   Definition ServerState := NatDict.t Value.
 
-  Record State := mkState {client : ClientState; server : ServerState}.
+  Record State := mkState {agent : AgentState; server : ServerState}.
   Definition InitState (name : Name) : State :=
     mkState pass (NatDict.empty Value).
 
-  Definition NetId     := String.string.
-  Inductive  NetMsg    := netM : NetId -> Msg    -> NetMsg.
-  Inductive  NetInput  := netI : NetId -> Input  -> NetInput.
-  Inductive  NetOutput := netO : NetId -> Output -> NetOutput.
+  Definition ClientId  := String.string.
+  Inductive  NetMsg    := netM : ClientId -> Msg    -> NetMsg.
+  Inductive  NetInput  := netI : ClientId -> Input  -> NetInput.
+  Inductive  NetOutput := netO : ClientId -> Output -> NetOutput.
   Definition NetMsg_eq_dec : forall m m' : NetMsg, {m = m'} + {m <> m'}.
     repeat decide equality.
   Defined.
 
   Definition StateHandler := GenHandler (Name * NetMsg) State NetOutput unit.
 
-  Definition ClientNetHandler (nm : NetMsg) : StateHandler :=
+  Definition AgentNetHandler (nm : NetMsg) : StateHandler :=
     state <- get ;;
     let s := server state in
     let 'netM id m := nm in
@@ -82,7 +82,7 @@ Section Bank.
                 end
     end.
 
-  Definition ClientIOHandler (ni : NetInput) : StateHandler :=
+  Definition AgentIOHandler (ni : NetInput) : StateHandler :=
     state <- get ;;
     let 'netI id i := ni in
     let s := server state in (
@@ -97,7 +97,7 @@ Section Bank.
 
   Definition ServerNetHandler (nm : NetMsg) : StateHandler :=
     state <- get ;;
-    let c := client state in
+    let c := agent state in
     let s := server state in
     let 'netM id m := nm in
     match m with
@@ -108,29 +108,29 @@ Section Bank.
             match NatDict.find acc s with
             | None => let val'' := 0 in (
                         put (mkState c (NatDict.add acc val'' s))
-                        >> send (Client, netM id (resp (PassMsg acc val''))))
-            | _    => send (Client, netM id (resp FailMsg))
+                        >> send (Agent, netM id (resp (PassMsg acc val''))))
+            | _    => send (Agent, netM id (resp FailMsg))
             end
         | DepositMsg acc val =>
             match NatDict.find acc s with
             | Some val' => let val'' := val + val' in (
                              put (mkState c (NatDict.add acc val'' s))
-                             >> send (Client, netM id (resp (PassMsg acc val''))))
-            | _            => send (Client, netM id (resp FailMsg))
+                             >> send (Agent, netM id (resp (PassMsg acc val''))))
+            | _            => send (Agent, netM id (resp FailMsg))
             end
         | WithdrawMsg acc val =>
             match NatDict.find acc s with
             | Some val' => if lt_dec val val'
-                           then send (Client, netM id (resp FailMsg))
+                           then send (Agent, netM id (resp FailMsg))
                            else let val'' := val' - val in (
                                   put (mkState c (NatDict.add acc val'' s))
-                                  >> send (Client, netM id (resp (PassMsg acc val''))))
-            | None      => send (Client, netM id (resp FailMsg))
+                                  >> send (Agent, netM id (resp (PassMsg acc val''))))
+            | None      => send (Agent, netM id (resp FailMsg))
             end
         | CheckMsg acc =>
             match NatDict.find acc s with
-            | Some val' => send (Client, netM id (resp (PassMsg acc val')))
-            | None      => send (Client, netM id (resp FailMsg))
+            | Some val' => send (Agent, netM id (resp (PassMsg acc val')))
+            | None      => send (Agent, netM id (resp FailMsg))
             end
         end
     end.
@@ -144,7 +144,7 @@ Section Bank.
     output := NetOutput
   }.
 
-  Definition Nodes : list Name := [Server ; Client].
+  Definition Nodes : list Name := [Server ; Agent].
 
   Theorem nodup_Nodes : NoDup Nodes.
   Proof using.
@@ -163,14 +163,14 @@ Section Bank.
   Definition NetHandler (dst src : Name) (nm : NetMsg) (s : State) :=
     runGenHandler_ignore s (
       match dst with
-      | Client => ClientNetHandler nm
+      | Agent  => AgentNetHandler nm
       | Server => ServerNetHandler nm
       end).
 
   Definition IOHandler (n : Name) (ni : NetInput) (s : State) :=
     runGenHandler_ignore s (
       match n with
-      | Client => ClientIOHandler ni
+      | Agent  => AgentIOHandler ni
       | Server => ServerIOHandler ni
       end).
 

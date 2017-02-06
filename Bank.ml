@@ -17,7 +17,7 @@ let _ =
   in
 
   (* FIXME: Not sure how verdi-raft and verdi-aggregation map `int` to `name` *)
-  let name id = if id = 0 then Bank_Coq.Server else Bank_Coq.Client in
+  let name id = if id = 0 then Bank_Coq.Server else Bank_Coq.Agent in
   let named_cluster = List.map (fun (id, addr) -> ((name id) , addr)) !cluster in
   let named_me = name !me in
 

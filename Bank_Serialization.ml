@@ -5,7 +5,7 @@ open String
 open Str
 open Util
 
-let invalidInputMessage (c : netId) : netInput option =
+let invalidInputMessage (c : clientId) : netInput option =
   print_endline ("[!] INVALID INPUT from " ^ (string_of_char_list c)) ; None
 
 let serializeOutput (out : netOutput) : char list * string =
@@ -15,7 +15,7 @@ let serializeOutput (out : netOutput) : char list * string =
   | NetO(client, Passed (account, value))
       -> (client, sprintf "PASS: %d %d\n" account value)
 
-let deserializeInput (i : string) (c : netId) : netInput option =
+let deserializeInput (i : string) (c : clientId) : netInput option =
   let inp = String.trim i in
   let regex_2 = regexp "^\\([A-Z]+\\) +\\([0-9]+\\)$" in
   let regex_3 = regexp "^\\([A-Z]+\\) +\\([0-9]+\\) +\\([0-9]+\\)$" in
@@ -42,10 +42,16 @@ let deserializeMsg (s : string) : netMsg = Marshal.from_string s 0
 type direction = Send | Recv
 
 let serializeReqHumanReadable (rm : reqMsg) : string =
-  ""
+  match rm with
+  | CreateMsg   a    -> sprintf "CREATE %d"      a
+  | DepositMsg (a,v) -> sprintf "DEPOSIT %d %d"  a v
+  | WithdrawMsg(a,v) -> sprintf "WITHDRAW %d %d" a v
+  | CheckMsg    a    -> sprintf "CHECK %d"       a
 
 let serializeRespHumanReadable (rm : respMsg) : string =
-  ""
+  match rm with
+  | FailMsg      -> "FAIL"
+  | PassMsg(a,v) -> sprintf "PASS %d %d" a v
 
 let serializeMsgHumanReadable (nm : netMsg) : (string * string) =
   let NetM (id, m) = nm in
@@ -55,8 +61,20 @@ let serializeMsgHumanReadable (nm : netMsg) : (string * string) =
 
 let dbgSerializeComm (d : direction) (s : state) ((n , m) : name * netMsg) =
   let (id, sm) = serializeMsgHumanReadable m in
-    print_endline ("  " ^ id ^ (if d = Send then " < " else " > ") ^ sm)
+    print_endline ("  " ^ id ^ (if d = Send then " > " else " < ") ^ sm)
 
-let dbgSerializeInput (s : state) (i : netInput) = ()
+let serializeInputHumanReadable (ni : netInput) : (string * string) =
+  let NetI (id, i) = ni in
+    ((string_of_char_list id),
+     (match i with
+      | Timeout       -> "TIMEOUT"
+      | Create a      -> sprintf "CREATE %d"      a
+      | Deposit(a,v)  -> sprintf "DEPOSIT %d %d"  a v
+      | Withdraw(a,v) -> sprintf "WITHDRAW %d %d" a v
+      | Check(a)      -> sprintf "CHECK %d"       a))
+
+let dbgSerializeInput (s : state) (i : netInput) =
+  let (id, si) = serializeInputHumanReadable i in
+    print_endline ("  " ^ id ^ " >>> " ^ si)
 
 let dbgSerializeTimeout (s : state) = ()

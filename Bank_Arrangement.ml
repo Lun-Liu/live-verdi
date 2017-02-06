@@ -29,7 +29,7 @@ module BankArrangement (P : BankParams) = struct
   let systemName = "Distributed Banking System"
   let init (n : name) = magic (bank_multi_params.init_handlers (magic n))
 
-  type client_id = Bank_Coq.netId
+  type client_id = Bank_Coq.clientId
   let createClientId () = char_list_of_string (Uuidm.to_string (Uuidm.create `V4))
   let serializeClientId (c : char list) = string_of_char_list c
 

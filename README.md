@@ -3,8 +3,8 @@
 A simple project to experiment with proving liveness properties in
 [Verdi][verdi].
 
-It spawns a banking server which keeps the account records, and a trusted ATM
-to which clients can talk to, for making transactions.
+It spawns a banking server which keeps the account records, and a trusted agent
+(equivalent of an ATM) to which clients can talk to, for making transactions.
 
 ## Requirements
 
@@ -26,18 +26,18 @@ Executable:
 - Running the cluster using `Bank.native`:
 
 ```shell-script
-# Server listening for input on port 8100, talking to ATM on 9100
+# Server listening for input on port 8100, talking to agent on 9100
 $ ./Bank.native -me 0 -port 8100 -node 0,localhost:9100 -node 1,localhost:9101
 
-# ATM listening for input on port 8101, talking to Server on 9101
+# Agent listening for input on port 8101, talking to Server on 9101
 $ ./Bank.native -me 1 -port 8101 -node 0,localhost:9100 -node 1,localhost:9101
 ```
 
-- User interactions: making transactions using the ATM can be made by connecting
-  to the port the ATM is listening on. For example:
+- User interactions: making transactions using the agent can be made by connecting
+  to the port the agent is listening on. For example:
 
 ```shell-script
-# Connect to ATM
+# Connect to agent
 $ socat tcp:localhost:8101 -
 CHECK 1001
 FAIL
