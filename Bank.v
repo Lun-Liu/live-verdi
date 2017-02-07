@@ -206,4 +206,19 @@ Section Bank.
   {
     reboot := reboot
   }.
+  
+  Definition valid_values (m : NatDict.t Value) : Prop := 
+  forall acc v, NatDict.mem acc m = true -> NatDict.find acc m = Some v -> v >=0.
+  
+  Definition bank_correct (sigma : Name -> State) : Prop :=
+    valid_values (server (sigma Server)).
+    
+  Lemma bank_correct_init :
+    bank_correct init_handlers.
+  Proof.
+    simpl. discriminate.
+  Qed.
+  
+  
+  
 End Bank.
