@@ -51,8 +51,11 @@ Section Bank.
   | Failed
   | Passed : Account -> Value -> Output.
 
-  Inductive  AgentState  := wait | pass | fail.
   Definition ServerState := NatDict.t Value.
+  Inductive  AgentState  := wait | pass | fail.
+  Definition AState_eq_dec : forall a a' : AgentState, {a = a'} + {a <> a'}.
+    decide equality.
+  Defined.
 
   Record State := mkState {agent : AgentState; server : ServerState}.
   Definition InitState (name : Name) : State :=
@@ -74,26 +77,33 @@ Section Bank.
     let 'netM id m := nm in
     match m with
     | req  _ => nop
-    | resp r => match r with
-                | FailMsg         => put (mkState fail s)
-                                     >> write_output (netO id Failed)
-                | PassMsg acc val => put (mkState pass s)
-                                     >> write_output (netO id (Passed acc val))
-                end
+    | resp r => if AState_eq_dec wait (agent state) then
+                  match r with
+                  | FailMsg         => put (mkState fail s)
+                                       >> write_output (netO id Failed)
+                  | PassMsg acc val => put (mkState pass s)
+                                       >> write_output (netO id (Passed acc val))
+                  end
+                else nop
     end.
 
   Definition AgentIOHandler (ni : NetInput) : StateHandler :=
     state <- get ;;
     let 'netI id i := ni in
-    let s := server state in (
-      put (mkState wait s) ;;
+    let s := server state in
       match i with
-      | Timeout          => put (mkState fail s)
-      | Create   acc     => send (Server, netM id (req (CreateMsg   acc)))
-      | Deposit  acc val => send (Server, netM id (req (DepositMsg  acc val)))
-      | Withdraw acc val => send (Server, netM id (req (WithdrawMsg acc val)))
-      | Check    acc     => send (Server, netM id (req (CheckMsg    acc)))
-      end).
+      | Timeout          => if AState_eq_dec fail (agent state)
+                            then put (mkState fail s)
+                            else nop
+      | Create   acc     => put (mkState wait s)
+                            ;; send (Server, netM id (req (CreateMsg   acc)))
+      | Deposit  acc val => put (mkState wait s)
+                            ;; send (Server, netM id (req (DepositMsg  acc val)))
+      | Withdraw acc val => put (mkState wait s)
+                            ;; send (Server, netM id (req (WithdrawMsg acc val)))
+      | Check    acc     => put (mkState wait s)
+                            ;; send (Server, netM id (req (CheckMsg    acc)))
+      end.
 
   Definition ServerNetHandler (nm : NetMsg) : StateHandler :=
     state <- get ;;
