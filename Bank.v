@@ -60,9 +60,14 @@ Section Bank.
     decide equality.
   Defined.
 
-  Record State := mkState {agent : AgentState; server : ServerState}.
+  Inductive State :=
+  | agent  : AgentState  -> State
+  | server : ServerState -> State.
   Definition InitState (name : Name) : State :=
-    mkState pass (NatDict.empty Value).
+    match name with
+    | Agent  => agent  pass
+    | Server => server (NatDict.empty Value)
+    end.
 
   Definition ClientId  := String.string.
   Inductive  NetMsg    := netM : ClientId -> Msg    -> NetMsg.
@@ -72,79 +77,77 @@ Section Bank.
     repeat decide equality.
   Defined.
 
-  Definition StateHandler := GenHandler (Name * NetMsg) State NetOutput unit.
+  Definition MakeHandler (s : Type) :=
+    GenHandler (Name * NetMsg) s NetOutput unit.
+  Definition AgentStateHandler := MakeHandler AgentState.
+  Definition ServerStateHandler := MakeHandler ServerState.
+  Definition StateHandler := MakeHandler State.
 
-  Definition AgentNetHandler (nm : NetMsg) : StateHandler :=
+  Definition AgentNetHandler (nm : NetMsg) : AgentStateHandler :=
     state <- get ;;
-    let s := server state in
     let 'netM id m := nm in
     match m with
     | req  _ => nop
-    | resp r => if AState_eq_dec wait (agent state) then
-                  match r with
-                  | FailMsg         => put (mkState fail s)
-                                       >> write_output (netO id Failed)
-                  | PassMsg acc val => put (mkState pass s)
-                                       >> write_output (netO id (Passed acc val))
-                  end
-                else nop
+    | resp r =>
+        if AState_eq_dec wait state then
+          match r with
+          | FailMsg         => put fail >> write_output (netO id Failed)
+          | PassMsg acc val => put pass >> write_output (netO id (Passed acc val))
+          end
+        else nop
     end.
 
-  Definition AgentIOHandler (ni : NetInput) : StateHandler :=
+  Definition AgentIOHandler (ni : NetInput) : AgentStateHandler :=
     state <- get ;;
     let 'netI id i := ni in
-    let s := server state in (
-      if Input_eq_dec i Timeout then nop else put (mkState wait s) ;;
+      if Input_eq_dec i Timeout then nop else put wait ;;
       match i with
-      | Timeout          => if AState_eq_dec fail (agent state)
-                            then put (mkState fail s) else nop
+      | Timeout          => if AState_eq_dec fail state then nop else put fail
       | Create   acc     => send (Server, netM id (req (CreateMsg   acc)))
       | Deposit  acc val => send (Server, netM id (req (DepositMsg  acc val)))
       | Withdraw acc val => send (Server, netM id (req (WithdrawMsg acc val)))
       | Check    acc     => send (Server, netM id (req (CheckMsg    acc)))
-      end).
+      end.
 
-  Definition ServerNetHandler (nm : NetMsg) : StateHandler :=
+  Definition ServerNetHandler (nm : NetMsg) : ServerStateHandler :=
     state <- get ;;
-    let c := agent state in
-    let s := server state in
     let 'netM id m := nm in
     match m with
     | resp _ => nop
     | req  r =>
         match r with
         | CreateMsg acc =>
-            match NatDict.find acc s with
+            match NatDict.find acc state with
             | None => let val'' := 0 in (
-                        put (mkState c (NatDict.add acc val'' s))
+                        put (NatDict.add acc val'' state)
                         >> send (Agent, netM id (resp (PassMsg acc val''))))
             | _    => send (Agent, netM id (resp FailMsg))
             end
         | DepositMsg acc val =>
-            match NatDict.find acc s with
+            match NatDict.find acc state with
             | Some val' => let val'' := val + val' in (
-                             put (mkState c (NatDict.add acc val'' s))
+                             put (NatDict.add acc val'' state)
                              >> send (Agent, netM id (resp (PassMsg acc val''))))
             | _            => send (Agent, netM id (resp FailMsg))
             end
         | WithdrawMsg acc val =>
-            match NatDict.find acc s with
+            match NatDict.find acc state with
             | Some val' => if lt_dec val val'
                            then send (Agent, netM id (resp FailMsg))
                            else let val'' := val' - val in (
-                                  put (mkState c (NatDict.add acc val'' s))
+                                  put (NatDict.add acc val'' state)
                                   >> send (Agent, netM id (resp (PassMsg acc val''))))
             | None      => send (Agent, netM id (resp FailMsg))
             end
         | CheckMsg acc =>
-            match NatDict.find acc s with
+            match NatDict.find acc state with
             | Some val' => send (Agent, netM id (resp (PassMsg acc val')))
             | None      => send (Agent, netM id (resp FailMsg))
             end
         end
     end.
 
-  Definition ServerIOHandler (ni : NetInput) : StateHandler := nop.
+  Definition ServerIOHandler (ni : NetInput) : ServerStateHandler := nop.
 
   Instance bank_base_params : BaseParams :=
   {
@@ -170,18 +173,26 @@ Section Bank.
   Qed.
 
   Definition NetHandler (dst src : Name) (nm : NetMsg) (s : State) :=
-    runGenHandler_ignore s (
-      match dst with
-      | Agent  => AgentNetHandler nm
-      | Server => ServerNetHandler nm
-      end).
+    match (dst , s) with
+    | (Agent  , agent  astate) =>
+        let '(a,b,c) := runGenHandler_ignore astate (AgentNetHandler nm)
+        in (a, agent b, c)
+    | (Server , server sstate) =>
+        let '(a,b,c) := runGenHandler_ignore sstate (ServerNetHandler nm)
+        in (a, server b, c)
+    | _ => runGenHandler_ignore s nop
+    end.
 
   Definition IOHandler (n : Name) (ni : NetInput) (s : State) :=
-    runGenHandler_ignore s (
-      match n with
-      | Agent  => AgentIOHandler ni
-      | Server => ServerIOHandler ni
-      end).
+    match (n , s) with
+    | (Agent  , agent  astate) =>
+        let '(a,b,c) := runGenHandler_ignore astate (AgentIOHandler ni)
+        in (a, agent b, c)
+    | (Server , server sstate) =>
+        let '(a,b,c) := runGenHandler_ignore sstate (ServerIOHandler ni)
+        in (a, server b, c)
+    | _ => runGenHandler_ignore s nop
+    end.
 
   Instance bank_multi_params : MultiParams bank_base_params :=
   {
@@ -208,15 +219,35 @@ Section Bank.
   }.
 
   Definition valid_values (m : ServerState) : Prop := 
-  forall acc v, NatDict.mem acc m = true -> NatDict.find acc m = Some v -> v >= 0.
+    forall acc v,
+      NatDict.find acc m = Some v ->
+      v >= 0.
 
   Definition bank_correct (sigma : Name -> State) : Prop :=
-    valid_values (server (sigma Server)).
+    match (sigma Server) with
+    | agent  _      => False
+    | server sstate => valid_values sstate
+    end.
 
   Lemma bank_correct_init :
     bank_correct init_handlers.
-  Proof.
+  Proof using.
     simpl. discriminate.
+  Qed.
+
+  (* Basic lemmas on stepping*)
+
+  Lemma step_star_no_trace_no_step :
+    forall net net' trace,
+      step_async_star net net' trace ->
+      trace = [] ->
+      net = net'.
+  Proof using.
+    intros. invc H.
+      (* net = net' *)
+      - reflexivity.
+      (* net -> x' -> net' *)
+      - invc H1 ; invc H5.
   Qed.
 
   Definition trace_values (trace : list (name * (input + list output)))

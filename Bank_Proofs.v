@@ -10,6 +10,4 @@ Section Bank_Proof.
   Context {bank_base_params  : BaseParams}.
   Context {bank_multi_params : MultiParams bank_base_params}.
 
-  (* TODO: Figure out imports and move proofs here *)
-
 End Bank_Proof.
