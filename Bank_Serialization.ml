@@ -8,7 +8,7 @@ open Util
 let invalidInputMessage (c : clientId) : netInput option =
   print_endline ("[!] INVALID INPUT from " ^ (string_of_char_list c)) ; None
 
-let serializeOutput (out : netOutput) : char list * string =
+let serializeOutput (out : netOutput) : clientId * string =
   match (Obj.magic out) with
   | NetO(client, Failed)
       -> (client, sprintf "FAIL\n")

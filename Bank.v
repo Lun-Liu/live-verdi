@@ -46,6 +46,9 @@ Section Bank.
   | Deposit  : Account -> Value -> Input
   | Withdraw : Account -> Value -> Input
   | Check    : Account -> Input.
+  Definition Input_eq_dec : forall i i' : Input, {i = i'} + {i <> i'}.
+    repeat decide equality.
+  Defined.
 
   Inductive Output :=
   | Failed
@@ -90,20 +93,16 @@ Section Bank.
   Definition AgentIOHandler (ni : NetInput) : StateHandler :=
     state <- get ;;
     let 'netI id i := ni in
-    let s := server state in
+    let s := server state in (
+      if Input_eq_dec i Timeout then nop else put (mkState wait s) ;;
       match i with
       | Timeout          => if AState_eq_dec fail (agent state)
-                            then put (mkState fail s)
-                            else nop
-      | Create   acc     => put (mkState wait s)
-                            ;; send (Server, netM id (req (CreateMsg   acc)))
-      | Deposit  acc val => put (mkState wait s)
-                            ;; send (Server, netM id (req (DepositMsg  acc val)))
-      | Withdraw acc val => put (mkState wait s)
-                            ;; send (Server, netM id (req (WithdrawMsg acc val)))
-      | Check    acc     => put (mkState wait s)
-                            ;; send (Server, netM id (req (CheckMsg    acc)))
-      end.
+                            then put (mkState fail s) else nop
+      | Create   acc     => send (Server, netM id (req (CreateMsg   acc)))
+      | Deposit  acc val => send (Server, netM id (req (DepositMsg  acc val)))
+      | Withdraw acc val => send (Server, netM id (req (WithdrawMsg acc val)))
+      | Check    acc     => send (Server, netM id (req (CheckMsg    acc)))
+      end).
 
   Definition ServerNetHandler (nm : NetMsg) : StateHandler :=
     state <- get ;;
@@ -156,7 +155,7 @@ Section Bank.
 
   Definition Nodes : list Name := [Server ; Agent].
 
-  Theorem nodup_Nodes : NoDup Nodes.
+  Theorem no_dup_Nodes : NoDup Nodes.
   Proof using.
     unfold Nodes. apply NoDup_cons ; simpl.
     - easy'.
@@ -193,7 +192,7 @@ Section Bank.
     msg_eq_dec := NetMsg_eq_dec;
 
     nodes := Nodes ;
-    no_dup_nodes := nodup_Nodes ;
+    no_dup_nodes := no_dup_Nodes ;
     all_names_nodes := all_Names_Nodes;
 
     init_handlers := InitState ;
@@ -201,24 +200,52 @@ Section Bank.
     input_handlers := IOHandler
   }.
 
+  (* FIXME: X_X *)
   Definition reboot (state : State) : State := state.
   Instance failure_params : FailureParams _ :=
   {
     reboot := reboot
   }.
-  
-  Definition valid_values (m : NatDict.t Value) : Prop := 
-  forall acc v, NatDict.mem acc m = true -> NatDict.find acc m = Some v -> v >=0.
-  
+
+  Definition valid_values (m : ServerState) : Prop := 
+  forall acc v, NatDict.mem acc m = true -> NatDict.find acc m = Some v -> v >= 0.
+
   Definition bank_correct (sigma : Name -> State) : Prop :=
     valid_values (server (sigma Server)).
-    
+
   Lemma bank_correct_init :
     bank_correct init_handlers.
   Proof.
     simpl. discriminate.
   Qed.
-  
-  
-  
+
+  Definition trace_values (trace : list (name * (input + list output)))
+                          : list Value :=
+    flat_map (fun n_io => match n_io with
+                          | (Server, _)    => nil
+                          | (Agent, inl _) => nil
+                          | (Agent, inr listO) =>
+                              filterMap (fun o => match o with
+                                                  | netO _ Failed => None
+                                                  | netO _ (Passed _ v) => Some v
+                                                  end)
+                                        listO
+                 end)
+              trace.
+
+
+  (* [SAFETY]
+   * No Negative Value : Over all traces, the returned account value
+   *                     is always non-negative.
+   *)
+  Theorem no_negative_value :
+    forall net trace,
+      step_async_star step_async_init net trace ->
+      forall v, List.In v (trace_values trace) -> v >= 0.
+  Proof using.
+    intros net trace H_network_step_star v H_v_in_trace.
+    unfold trace_values in H_v_in_trace.
+    apply in_flat_map in H_v_in_trace.
+  Admitted.
+
 End Bank.
