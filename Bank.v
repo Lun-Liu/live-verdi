@@ -218,6 +218,14 @@ Section Bank.
     reboot := reboot
   }.
 
+  (* Repeated unfolding of all handler monads *)
+  Ltac bank_handlers_unfold :=
+    repeat (monad_unfold ; unfold NetHandler,
+                                  AgentNetHandler, ServerNetHandler,
+                                  IOHandler,
+                                  AgentIOHandler, ServerIOHandler
+                                  in *).
+
 (* 
   SAFETY for STATES, no need now
 
@@ -225,7 +233,7 @@ Section Bank.
     forall acc v,
       NatDict.find acc m = Some v ->
       v >= 0.
-      
+
   Definition bank_correct (sigma : Name -> State) : Prop :=
     match (sigma Server) with
     | agent  _      => False
@@ -313,10 +321,11 @@ Qed.
   true_in_reachable step_async step_async_init (fun net => bank_correct (nwState net)).
   Proof.
   Admitted.*)
-  
-  Print true_in_reachable.
 
-  (* Basic lemmas on stepping*)
+
+  (*
+   * Basic lemmas on steps and traces
+   *)
 
   Lemma step_star_no_trace_no_step :
     forall net net' trace,
@@ -330,6 +339,43 @@ Qed.
       (* net -> x' -> net' *)
       - invc H1 ; invc H5.
   Qed.
+
+  Lemma trace_well_formed :
+    forall net net' trace,
+      step_async_star net net' trace ->
+      (trace = [] \/ exists trace' n io, trace = trace' ++ [(n, io)]).
+  Proof using.
+    intros.
+    find_apply_lem_hyp refl_trans_1n_n1_trace.
+    invcs H.
+    (* net = net' *)
+    - intuition.
+    (* net -> x' -> net' *)
+    - right. invcs H1.
+      + eauto.
+      + exists (cs ++ [(h, inl inp)]), h, (inr out). apply snoc_assoc.
+  Qed.
+
+  (* [SAFETY]
+   * Trace Correctness : Simulate the trace on an interpreter and prove that
+   *                     we get equivalent behaviour on the distributed system.
+   *)
+
+(*  Definition operate (op : Input) (curr : option Value) :=
+    match op with
+    | Timeout          => (curr, curr)
+    | Create   acc     => (curr, curr)
+    | Deposit  acc val => (curr, curr)
+    | Withdraw acc val => (curr, curr)
+    | Check    acc     => (curr, curr)
+    end.
+
+  Fixpoint interpret (acc : Account) (ops : list Input) (init : option Value) :=
+    match ops with
+    | [] => (init, init)
+    | _  => (init, init)
+    end.
+*)
 
   Definition trace_values (trace : list (name * (input + list output)))
                           : list Value :=
@@ -359,7 +405,5 @@ Qed.
     unfold trace_values in H_v_in_trace.
     apply in_flat_map in H_v_in_trace.
   Admitted.
-  
 
-  
 End Bank.
