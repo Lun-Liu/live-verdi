@@ -218,11 +218,14 @@ Section Bank.
     reboot := reboot
   }.
 
+(* 
+  SAFETY for STATES, no need now
+
   Definition valid_values (m : ServerState) : Prop := 
     forall acc v,
       NatDict.find acc m = Some v ->
       v >= 0.
-
+      
   Definition bank_correct (sigma : Name -> State) : Prop :=
     match (sigma Server) with
     | agent  _      => False
@@ -234,6 +237,84 @@ Section Bank.
   Proof using.
     simpl. discriminate.
   Qed.
+  
+  Definition timeout_case (i : NetInput) (out : list NetOutput) (st : State) (st' : State) (ms : list (Name * NetMsg)) :=
+  match st with
+  | server ss => False
+  | agent _ => exists cid, i = netI cid (Timeout) /\ out = [] /\ ms = []
+  end.
+  
+  Definition create_case (i : NetInput) (out : list NetOutput) (st : State) (st' : State) (ms : list (Name * NetMsg)) :=
+  match st with
+  | server ss => False
+  | agent _ => exists a cid, i = netI cid (Create a) /\ out = [] /\ ms = [(Server, netM cid (req (CreateMsg a)))]
+  end.
+  
+  Definition deposit_case (i : NetInput) (out : list NetOutput) (st : State) (st' : State) (ms : list (Name * NetMsg)) :=
+  match st with
+  | server ss => False
+  | agent _ => exists a v cid, i = netI cid (Deposit a v) /\ out = []  /\ ms = [(Server, netM cid (req (DepositMsg a v)))]
+  end.
+  
+  Definition withdraw_case (i : NetInput) (out : list NetOutput) (st : State) (st' : State) (ms : list (Name * NetMsg)) :=
+  match st with
+  | server ss => False
+  | agent _ => exists a v cid, i = netI cid (Withdraw a v) /\ out = [] /\ ms = [(Server, netM cid (req (WithdrawMsg a v)))]
+  end.
+
+  Definition check_case (i : NetInput) (out : list NetOutput) (st : State) (st' : State) (ms : list (Name * NetMsg)) :=
+  match st with
+  | server ss => False
+  | agent _ => exists a cid, i = netI cid (Check a) /\ out = [] /\ ms = [(Server, netM cid (req (CheckMsg a)))]
+  end.
+
+  Ltac handler_unfold :=
+    repeat (monad_unfold; unfold NetHandler,
+                                 IOHandler,
+                                 ServerNetHandler,
+                                 AgentNetHandler,
+                                 AgentIOHandler,
+                                 ServerIOHandler in .
+  
+  Lemma IOHandler_cases:
+  forall name input state netout state' ms,
+    IOHandler name input state = (netout, state', ms) ->
+    (name = Agent /\ (timeout_case input netout state state' ms \/ create_case input netout state state' ms \/ deposit_case input netout state state' ms \/ withdraw_case input netout state state' ms \/ check_case input netout state state' ms)) \/ (netout = [] /\ state = state' /\ ms = []). 
+  Proof.
+  handler_unfold. intros.
+  repeat break_match;
+  repeat tuple_inversion;
+  [left|left|left|left|left|left|left|right|right|right]; 
+  try intuition.
+  - left. unfold timeout_case. repeat eexists.
+  - right. left. unfold create_case. repeat eexists.
+  - right. right. left. unfold deposit_case. repeat eexists.
+  - right. right. right. left. unfold withdraw_case. repeat eexists.
+  - repeat (try right). unfold check_case. repeat eexists.
+Qed.
+
+  Lemma bank_correct_io_handlers :
+    forall name input sigma st' netout ms,
+      IOHandler name input (sigma name) = (netout, st', ms) ->
+      bank_correct sigma ->
+      bank_correct (update name_eq_dec sigma name st').
+  Proof. 
+  Admitted.
+   
+  Lemma bank_correct_net_handlers :
+    forall p sigma st' out ms,
+      NetHandler (pDst p) (pSrc p) (pBody p) (sigma (pDst p)) = (out, st', ms) ->
+      bank_correct sigma ->
+      bank_correct (update name_eq_dec sigma (pDst p) st').
+  Proof.
+  Admitted.
+  
+  Theorem true_in_reachable_bank_correct :
+  true_in_reachable step_async step_async_init (fun net => bank_correct (nwState net)).
+  Proof.
+  Admitted.*)
+  
+  Print true_in_reachable.
 
   (* Basic lemmas on stepping*)
 
@@ -278,5 +359,7 @@ Section Bank.
     unfold trace_values in H_v_in_trace.
     apply in_flat_map in H_v_in_trace.
   Admitted.
+  
 
+  
 End Bank.
