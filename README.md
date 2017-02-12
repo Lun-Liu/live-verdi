@@ -27,10 +27,10 @@ Executable:
 
 ```shell-script
 # Server listening for input on port 8100, talking to agent on 9100
-$ ./Bank.native -me 0 -port 8100 -node 0,localhost:9100 -node 1,localhost:9101
+$ ./bank.bin -me 0 -port 8100 -node 0,localhost:9100 -node 1,localhost:9101
 
 # Agent listening for input on port 8101, talking to Server on 9101
-$ ./Bank.native -me 1 -port 8101 -node 0,localhost:9100 -node 1,localhost:9101
+$ ./bank.bin -me 1 -port 8101 -node 0,localhost:9100 -node 1,localhost:9101
 ```
 
 - User interactions: making transactions using the agent can be made by connecting
