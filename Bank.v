@@ -108,13 +108,13 @@ Section Bank.
     let 'netI id i := ni in
       if AState_eq_dec wait state
       then (if Input_eq_dec i Timeout then put fail else write_output (netO id Reject))
-      else (put wait ;;
+      else (
             match i with
             | Timeout          => nop
-            | Create   acc     => send (Server, netM id (req (CreateMsg   acc)))
-            | Deposit  acc val => send (Server, netM id (req (DepositMsg  acc val)))
-            | Withdraw acc val => send (Server, netM id (req (WithdrawMsg acc val)))
-            | Check    acc     => send (Server, netM id (req (CheckMsg    acc)))
+            | Create   acc     => put wait ;; send (Server, netM id (req (CreateMsg   acc)))
+            | Deposit  acc val => put wait ;; send (Server, netM id (req (DepositMsg  acc val)))
+            | Withdraw acc val => put wait ;; send (Server, netM id (req (WithdrawMsg acc val)))
+            | Check    acc     => put wait ;; send (Server, netM id (req (CheckMsg    acc)))
             end).
 
   Definition ServerNetHandler (nm : NetMsg) : ServerStateHandler :=
