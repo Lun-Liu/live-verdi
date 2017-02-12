@@ -24,6 +24,8 @@ Section Bank.
     decide equality.
   Defined.
 
+  Definition minValue : Value := 5.
+
   Inductive Name := Agent | Server.
   Definition Name_eq_dec : forall n n' : Name, {n = n'} + {n <> n'}.
     decide equality.
@@ -54,6 +56,7 @@ Section Bank.
   Defined.
 
   Inductive Output :=
+  | Reject
   | Failed
   | Passed : Account -> Value -> Output.
 
@@ -103,14 +106,16 @@ Section Bank.
   Definition AgentIOHandler (ni : NetInput) : AgentStateHandler :=
     state <- get ;;
     let 'netI id i := ni in
-      if Input_eq_dec i Timeout then nop else put wait ;;
-      match i with
-      | Timeout          => if AState_eq_dec fail state then nop else put fail
-      | Create   acc     => send (Server, netM id (req (CreateMsg   acc)))
-      | Deposit  acc val => send (Server, netM id (req (DepositMsg  acc val)))
-      | Withdraw acc val => send (Server, netM id (req (WithdrawMsg acc val)))
-      | Check    acc     => send (Server, netM id (req (CheckMsg    acc)))
-      end.
+      if AState_eq_dec wait state
+      then (if Input_eq_dec i Timeout then put fail else write_output (netO id Reject))
+      else (put wait ;;
+            match i with
+            | Timeout          => nop
+            | Create   acc     => send (Server, netM id (req (CreateMsg   acc)))
+            | Deposit  acc val => send (Server, netM id (req (DepositMsg  acc val)))
+            | Withdraw acc val => send (Server, netM id (req (WithdrawMsg acc val)))
+            | Check    acc     => send (Server, netM id (req (CheckMsg    acc)))
+            end).
 
   Definition ServerNetHandler (nm : NetMsg) : ServerStateHandler :=
     state <- get ;;
@@ -121,21 +126,21 @@ Section Bank.
         match r with
         | CreateMsg acc =>
             match NatDict.find acc state with
-            | None => let val'' := 0 in (
+            | None => let val'' := minValue in (
                         put (NatDict.add acc val'' state)
                         >> send (Agent, netM id (resp (PassMsg acc val''))))
             | _    => send (Agent, netM id (resp FailMsg))
             end
         | DepositMsg acc val =>
             match NatDict.find acc state with
-            | Some val' => let val'' := val + val' in (
+            | Some val' => let val'' := val' + val in (
                              put (NatDict.add acc val'' state)
                              >> send (Agent, netM id (resp (PassMsg acc val''))))
             | _            => send (Agent, netM id (resp FailMsg))
             end
         | WithdrawMsg acc val =>
             match NatDict.find acc state with
-            | Some val' => if lt_dec val val'
+            | Some val' => if lt_dec (val' - val) minValue
                            then send (Agent, netM id (resp FailMsg))
                            else let val'' := val' - val in (
                                   put (NatDict.add acc val'' state)

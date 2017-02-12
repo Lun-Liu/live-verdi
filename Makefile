@@ -17,7 +17,9 @@ BANK_SN_PROOF = Bank_SN_Proofs.vo
 
 
 
-default: bank
+.PHONY: clean
+
+default: bank.bin
 
 
 $(BANK): $(BANK_EXTRACT)
@@ -33,21 +35,21 @@ $(BANK_SN_PROOF): $(BANK_SN_PROVE)
 	coqc $(BANK_SN_PROVE)
 
 
-bank: $(BANK)
+bank.bin: $(BANK)
 	$(OCAML_BUILD) Bank.native
-	mv Bank.native bank
+	mv Bank.native bank.bin
 
-bank-dbg: $(BANK_PROOF) $(BANK)
+bank-dbg.bin: $(BANK_PROOF) $(BANK)
 	$(OCAML_DBG_BUILD) Bank.d.byte
-	mv Bank.d.byte bank-dbg
+	mv Bank.d.byte bank-dbg.bin
 
-bank-sn: $(BANK_SN)
+bank-sn.bin: $(BANK_SN)
 	$(OCAML_BUILD) Bank.native
-	mv Bank.native bank-sn
+	mv Bank.native bank-sn.bin
 
-bank-sn-dbg: $(BANK_SN_PROOF) $(BANK_SN)
+bank-sn-dbg.bin: $(BANK_SN_PROOF) $(BANK_SN)
 	$(OCAML_DBG_BUILD) Bank.d.byte
-	mv Bank.d.byte bank-sn-dbg
+	mv Bank.d.byte bank-sn-dbg.bin
 
 
 

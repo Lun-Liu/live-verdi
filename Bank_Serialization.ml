@@ -10,6 +10,8 @@ let invalidInputMessage (c : clientId) : netInput option =
 
 let serializeOutput (out : netOutput) : clientId * string =
   match (Obj.magic out) with
+  | NetO(client, Reject)
+      -> (client, sprintf "REJECTED\n")
   | NetO(client, Failed)
       -> (client, sprintf "FAIL\n")
   | NetO(client, Passed (account, value))
@@ -17,6 +19,7 @@ let serializeOutput (out : netOutput) : clientId * string =
 
 let deserializeInput (i : string) (c : clientId) : netInput option =
   let inp = String.trim i in
+  if inp = "TIMEOUT" then Some (NetI (c, Timeout)) else
   let regex_2 = regexp "^\\([A-Z]+\\) +\\([0-9]+\\)$" in
   let regex_3 = regexp "^\\([A-Z]+\\) +\\([0-9]+\\) +\\([0-9]+\\)$" in
   if string_match regex_2 inp 0 then (
@@ -59,9 +62,17 @@ let serializeMsgHumanReadable (nm : netMsg) : (string * string) =
      (match m with Req rm  -> serializeReqHumanReadable rm
                  | Resp rm -> serializeRespHumanReadable rm))
 
+let dbgSerializeState (s : state) : string =
+  match s with
+  | Agent0 Wait -> "A Wait"
+  | Agent0 Pass -> "A Pass"
+  | Agent0 Fail -> "A Fail"
+  | Server0 _   -> "S"
+
 let dbgSerializeComm (d : direction) (s : state) ((n , m) : name * netMsg) =
   let (id, sm) = serializeMsgHumanReadable m in
-    print_endline ("  " ^ id ^ (if d = Send then " > " else " < ") ^ sm)
+    print_endline ("  " ^ id ^ " [" ^ (dbgSerializeState s) ^ "]"
+                        ^ (if d = Send then " > " else " < ") ^ sm)
 
 let serializeInputHumanReadable (ni : netInput) : (string * string) =
   let NetI (id, i) = ni in
@@ -75,6 +86,6 @@ let serializeInputHumanReadable (ni : netInput) : (string * string) =
 
 let dbgSerializeInput (s : state) (i : netInput) =
   let (id, si) = serializeInputHumanReadable i in
-    print_endline ("  " ^ id ^ " >>> " ^ si)
+    print_endline ("  " ^ id ^ " [" ^ (dbgSerializeState s) ^ "]" ^ " >>> " ^ si)
 
 let dbgSerializeTimeout (s : state) = ()

@@ -1,9 +1,13 @@
+_build
+
+*.bin
 *.native
 *.d.byte
-_build
+
 *.vo
 *.glob
 *.v.d
+#*.v#
 *~
 *.aux
 *.vio
