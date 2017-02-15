@@ -11,12 +11,15 @@ It spawns a banking server which keeps the account records, and a trusted agent
 Proofs:
 - `verdi`
 - `coq`
+- `coq-mathcomp-ssreflect`
 
 Executable:
+- `verdi-runtime`
+- `verdi`
+- `coq`
 - `ocamlbuild`
 - `ocamlfind`
 - `uuidm`
-- `verdi-runtime`
 
 (All of the above are `opam install`-able.)
 

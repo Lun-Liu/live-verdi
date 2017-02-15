@@ -1,10 +1,10 @@
-Require Import
-  Verdi.Verdi
-  Verdi.HandlerMonad.
+From Verdi Require Import
+  Verdi
+  HandlerMonad.
 
-Require Import
-  Coq.FSets.FMapList
-  Coq.Structures.OrderedTypeEx.
+From Coq Require Import
+  FSets.FMapList
+  Structures.OrderedTypeEx.
 
 Require String.
 

@@ -1,12 +1,17 @@
 Require Import Bank.
 
-Require Import
-  Verdi.Verdi
-  Verdi.HandlerMonad.
+From Verdi Require Import
+  Verdi
+  HandlerMonad.
 
-Require Import
-  Coq.FSets.FMapFacts
-  Coq.Structures.OrderedTypeEx.
+From Coq Require Import
+  FSets.FMapFacts
+  Structures.OrderedTypeEx.
+
+From mathcomp Require Import
+  ssreflect
+  ssrfun
+  ssrbool.
 
 Module NatDictWF := WFacts_fun Nat_as_OT NatDict.
 
@@ -72,33 +77,79 @@ Section Bank_Proof.
    * Min Value Balance : Over all traces, the returned account value
    *                     is always greater than the minimum value.
    *)
-  Inductive min_value_invariant_state : ServerState -> Prop :=
+  Inductive min_value_invariant_state : State -> Prop :=
+  | min_value_invariant_agent_state :
+      forall astate, min_value_invariant_state (agent astate)
   | min_value_invariant_nil_state :
-      min_value_invariant_state (NatDict.empty Value)
+      min_value_invariant_state (server (NatDict.empty Value))
   | min_value_invariant_add_state :
       forall st acc val,
-        min_value_invariant_state st ->
+        min_value_invariant_state (server st) ->
         val >= minValue ->
-        min_value_invariant_state (NatDict.add acc val st).
+        min_value_invariant_state (server (NatDict.add acc val st)).
+
+  Inductive min_value_invariant_packet : packet -> Prop :=
+  | min_value_invariant_passed_packet :
+      forall src dst c a v,
+        v >= minValue ->
+        min_value_invariant_packet (mkPacket src dst (netM c (resp (PassMsg a v))))
+  | min_value_invariant_other_packet :
+      forall pkt,
+        (not (exists c a v, (pBody pkt) = (netM c (resp (PassMsg a v))))) ->
+        min_value_invariant_packet pkt.
+
+  Inductive min_value_invariant_net : network -> Prop :=
+  | min_value_invariant_network :
+      forall net,
+        min_value_invariant_state ((nwState net) Server) ->
+        (forall p, In p (nwPackets net) -> min_value_invariant_packet p) ->
+        min_value_invariant_net net.
+
+  Fixpoint min_value_invariant_outputs (outs : list output) : Prop :=
+    match outs with
+    | nil                        => True
+    | (netO _ (Passed a v)) :: l => v >= 0 /\ (min_value_invariant_outputs l)
+    | _ :: l                     => True /\ (min_value_invariant_outputs l)
+    end.
+
+  Fixpoint min_value_invariant_trace (trace : list (name * (input + list output)))
+                                     : Prop :=
+    match trace with
+    | nil                  => True
+    | (Agent, inr os) :: l => (min_value_invariant_outputs os)
+                           /\ (min_value_invariant_trace l)
+    | _ :: l               => True /\ (min_value_invariant_trace l)
+    end.
+
+  Lemma min_value_invariant_trace_app :
+    forall tr1 tr2,
+      min_value_invariant_trace tr1 /\
+      min_value_invariant_trace tr2 ->
+      min_value_invariant_trace (tr1 ++ tr2).
+  Proof.
+    intros. intuition. induction tr1 ; intuition ; simpl in *.
+    repeat break_match ; intuition.
+  Qed.
 
   Lemma min_value_invariant_state_values :
     forall st k v,
-      min_value_invariant_state st ->
+      min_value_invariant_state (server st) ->
       NatDict.find k st = Some v ->
       v >= minValue.
   Proof using.
-    intros. induction H.
+    intros. prep_induction H. induction H ; intros ; invcs H2.
     - apply NatDictWF.find_mapsto_iff, NatDictWF.empty_mapsto_iff in H0.
       intuition.
-    - apply NatDictWF.find_mapsto_iff, NatDictWF.add_mapsto_iff in H0.
-      intuition. apply NatDictWF.find_mapsto_iff in H3. intuition.
+    - apply NatDictWF.find_mapsto_iff, NatDictWF.add_mapsto_iff in H1.
+      intuition. apply NatDictWF.find_mapsto_iff in H3.
+      apply (IHmin_value_invariant_state st k v) ; intuition.
   Qed.
 
   Lemma min_value_invariant_server_resp :
     forall msg st outs st' msgs,
-      min_value_invariant_state st ->
+      min_value_invariant_state (server st) ->
       ServerNetHandler msg st = (tt, outs, st', msgs) ->
-      (min_value_invariant_state st' /\
+      (min_value_invariant_state (server st') /\
         (forall d a c v,
           In (d, (netM c (resp (PassMsg a v)))) msgs ->
           v >= minValue)).
@@ -123,65 +174,62 @@ Section Bank_Proof.
       + apply (min_value_invariant_state_values st' a v) ; intuition.
   Qed.
 
-  Definition values_in_trace (trace : list (name * (input + list output)))
-                             : list Value :=
-    flat_map (fun n_io => match n_io with
-                          | (Server, _)    => nil
-                          | (Agent, inl _) => nil
-                          | (Agent, inr listO) =>
-                              filterMap (fun o => match o with
-                                                  | netO _ (Passed _ v) => Some v
-                                                  | _                   => None
-                                                  end)
-                                        listO
-                 end)
-              trace.
-
   Lemma min_value_invariant_step :
-    forall st net net' st' trace,
-      (nwState net) Server = server st ->
-      min_value_invariant_state st ->
-      step_async net net' trace ->
-      (nwState net') Server = server st' ->
-      (min_value_invariant_state st' /\
-        (forall v, In v (values_in_trace trace) -> v >= minValue)).
+    forall net net' tr,
+      min_value_invariant_net net ->
+      step_async net net' tr ->
+      (min_value_invariant_net net' /\ min_value_invariant_trace tr).
   Proof using.
-    intros. split.
-    (* state_values_gt_min_value st' *)
-    - invcs H1 ; break_if ; subst_max.
-      (* NetHandler *)
-      + unfold NetHandler in *. break_match.
-        * invcs e.
-        * break_match. invcs H4. invcs H. monad_unfold. 
-          repeat break_let. invcs H4. invcs Heqp0. destruct u.
-          pose proof (min_value_invariant_server_resp (pBody p) st out st' l).
-          intuition.
-      + simplify_bank_handlers ; try (rewrite H in H2 ; invcs H2 ; intuition).
-      (* IOHandler *)
-      + simplify_bank_handlers.
-        * invcs H.
-        * rewrite H in H5. invcs H5. intuition.
-      + simplify_bank_handlers ; try (rewrite H in H2 ; invcs H2 ; intuition).
-    (* forall v, In v (values_in_trace trace) -> v >= minValue *)
-    - intros. invcs H1 ; break_if.
-      (* NetHandler *)
-      + admit.
-      + apply in_nil in H3. destruct H3.
-      (* IOHandler *)
-      + simplify_bank_handlers ; try contradiction.
-      + apply in_nil in H3. destruct H3.
-  Admitted.
+    intros. invc H0 ; intuition.
+    (* NetHandler state *)
+    - apply min_value_invariant_network ; simpl ; invcs H.
+      + break_if ; intuition.
+        simplify_bank_handlers ; invcs e ; try constructor
+                               ; intuition ; find_inversion
+                               ; apply min_value_invariant_add_state ; intuition.
+        invcs H0. invcs Heqo. case (eq_nat_dec acc a) ; intros ; subst_max.
+        * apply NatDictWF.find_mapsto_iff, NatDictWF.add_mapsto_iff in Heqo. intuition.
+        * apply (min_value_invariant_state_values st a v0) in H2 ; intuition.
+          apply NatDictWF.find_mapsto_iff, NatDictWF.add_neq_mapsto_iff,
+                                           NatDictWF.find_mapsto_iff in Heqo ; intuition.
+    (* NetHandler packets *)
+      + intros. unfold NetHandler in H2. rewrite H1 in H3.
+        repeat break_match ; apply in_app_iff in H ; intuition ; invcs H2
+                           ; monad_unfold ; intuition ; repeat break_let
+                           ; try (invcs Heqp1 ; destruct u)
+                           ; try (simplify_bank_handlers ; contradiction)
+                           ; try apply in_app_iff in H4 ; intuition.
+        apply min_value_invariant_server_resp in Heqp0 ; intuition.
+        apply in_map_iff in H4. break_exists. intuition. subst_max.
+        destruct x, n0, m, r ; constructor ; last 1 [ apply H2 in H6 ; intuition ]
+                             ; intuition ; break_exists ; simpl in * ; find_inversion.
+    (* NetHandler trace *)
+    - simpl. break_match ; intuition. simplify_bank_handlers ; intuition.
+    (* IOHandler state *)
+    - apply min_value_invariant_network ; simpl ; invcs H.
+      + break_if ; intuition.
+        simplify_bank_handlers ; invcs e ; intuition.
+    (* IOHandler packets *)
+      + intros. apply in_app_iff in H. intuition.
+        simplify_bank_handlers ; try contradiction ; try invcs e ; intuition
+                               ; constructor ; intuition ; break_exists
+                               ; rewrite <- H in H1 ; invcs H1.
+    (* IOHandler trace *)
+    - simpl. break_match ; intuition. simplify_bank_handlers ; intuition.
+  Qed.
 
   Theorem min_value_invariant :
-    forall net st trace,
-      step_async_star step_async_init net trace ->
-      (nwState net) Server = server st ->
-      (min_value_invariant_state st /\
-        (forall v, In v (values_in_trace trace) -> v >= minValue)).
+    forall net tr,
+      step_async_star step_async_init net tr ->
+      (min_value_invariant_net net /\ min_value_invariant_trace tr).
   Proof using.
-    intros.
-    unfold values_in_trace in H0. split. admit.
-  Admitted.
+    intros. find_apply_lem_hyp refl_trans_1n_n1_trace.
+    prep_induction H. induction H
+                    ; intros ; subst_max ; intuition ; simplify_bank_handlers ; intuition
+                    ; try (apply (min_value_invariant_step x' x'' cs') in H1 ; intuition).
+    - constructor ; simpl in * ; intuition. constructor.
+    - apply (min_value_invariant_trace_app cs cs'). intuition.
+  Qed.
 
   Definition accounts_in_trace (trace : list (name * (input + list output)))
                                : list Account :=
