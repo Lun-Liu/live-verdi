@@ -230,6 +230,19 @@ Section Bank_Proof.
     - constructor ; simpl in * ; intuition. constructor.
     - apply (min_value_invariant_trace_app cs cs'). intuition.
   Qed.
+  
+  Lemma true_in_reachable_min_value :
+    true_in_reachable step_async step_async_init (fun net => min_value_invariant_net net).
+  Proof.
+  intro a. pose proof min_value_invariant a.
+  assert (inductive_invariant step_async step_async_init min_value_invariant_net).
+  - unfold inductive_invariant. split.
+    + apply min_value_invariant_network.
+      * apply min_value_invariant_nil_state.
+      * simpl. intros. inversion H0.
+    + unfold inductive. apply min_value_invariant_step.
+  - find_apply_lem_hyp inductive_invariant_true_in_reachable. apply H0.
+  Qed.
 
   Definition accounts_in_trace (trace : list (name * (input + list output)))
                                : list Account :=
