@@ -8,12 +8,12 @@ OCAML_DBG_BUILD = $(OCAML) -cflags -g
 BANK_EXTRACT    = Bank.v Bank_Extract.v
 BANK_PROVE      = Bank.v Bank_Proofs.v
 BANK_SN_EXTRACT = Bank.v Bank_SN.v Bank_SN_Extract.v
-BANK_SN_PROVE   = Bank.v Bank_SN.v Bank_SN_Proofs.v
+BANK_SN_PROVE   = $(BANK_PROVE) Bank_SN.v Bank_SN_Proofs.v
 
-BANK          = Bank_Extract.vo
-BANK_PROOF    = Bank_Proofs.vo
-BANK_SN       = Bank_SN_Extract.vo
-BANK_SN_PROOF = Bank_SN_Proofs.vo
+BANK          = $(BANK_EXTRACT:.v=.vo)
+BANK_PROOF    = $(BANK_PROVE:.v=.vo)
+BANK_SN       = $(BANK_SN_EXTRACT:.v=.vo)
+BANK_SN_PROOF = $(BANK_SN_PROVE:.v=.vo)
 
 
 
@@ -21,25 +21,21 @@ BANK_SN_PROOF = Bank_SN_Proofs.vo
 
 default: bank.bin
 
+quick: $(BANK_SN_PROVE:.v=.vio)
 
-$(BANK): $(BANK_EXTRACT)
-	coqc $(BANK_EXTRACT)
 
-$(BANK_PROOF): $(BANK_PROVE)
-	coqc $(BANK_PROVE)
+%.vio: %.v
+	coqc -quick $<
 
-$(BANK_SN): $(BANK_SN_EXTRACT)
-	coqc $(BANK_SN_EXTRACT)
-
-$(BANK_SN_PROOF): $(BANK_SN_PROVE)
-	coqc $(BANK_SN_PROVE)
+%.vo: %.v
+	coqc $<
 
 
 bank.bin: $(BANK)
 	$(OCAML_BUILD) Bank.native
 	mv Bank.native bank.bin
 
-bank-dbg.bin: $(BANK_PROOF) $(BANK)
+bank-dbg.bin: $(BANK_PROOF)
 	$(OCAML_DBG_BUILD) Bank.d.byte
 	mv Bank.d.byte bank-dbg.bin
 
@@ -47,7 +43,7 @@ bank-sn.bin: $(BANK_SN)
 	$(OCAML_BUILD) Bank.native
 	mv Bank.native bank-sn.bin
 
-bank-sn-dbg.bin: $(BANK_SN_PROOF) $(BANK_SN)
+bank-sn-dbg.bin: $(BANK_SN_PROOF)
 	$(OCAML_DBG_BUILD) Bank.d.byte
 	mv Bank.d.byte bank-sn-dbg.bin
 
@@ -55,4 +51,4 @@ bank-sn-dbg.bin: $(BANK_SN_PROOF) $(BANK_SN)
 
 clean:
 	$(OCAML_BUILD) -clean
-	rm -rf *.vo *.glob *_Coq.ml*
+	rm -rf *.vio *.vo *.glob *_Coq.ml*
