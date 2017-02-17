@@ -2,34 +2,47 @@ Require Import Bank.
 
 From Verdi Require Import
   Verdi
-  HandlerMonad.
+  HandlerMonad
+  LabeledNet.
 
-From Coq Require Import
-  FSets.FMapFacts
-  Structures.OrderedTypeEx.
+From InfSeqExt Require Import
+  infseq
+  exteq.
 
 From mathcomp Require Import
   ssreflect
   ssrfun
   ssrbool.
 
+From Coq Require Import
+  FSets.FMapFacts
+  Structures.OrderedTypeEx.
+
 Module NatDictWF := WFacts_fun Nat_as_OT NatDict.
 
 Set Bullet Behavior "Strict Subproofs".
 
-Section Bank_Proof.
+Section Bank_Proofs.
 
   (*******
    * Tactics
    *******)
 
+  Ltac basic_unfold :=
+    repeat ( unfold step_async_init,
+                    unlabeled_input_handlers, unlabeled_net_handlers,
+                    lb_net_handlers, lb_input_handlers,
+                    net_handlers, input_handlers in *
+           ).
+
+  (* TODO: Try to remove basic_unfold below.
+           Handlers shouldn't generate the above functions. *)
   Ltac simplify_bank_handlers :=
     repeat ( monad_unfold
-           ; unfold step_async_init, InitState,
-                    NetHandler,
-                    AgentNetHandler, ServerNetHandler,
-                    IOHandler,
-                    AgentIOHandler, ServerIOHandler in *
+           ; basic_unfold
+           ; unfold InitState,
+                    NetHandler, AgentNetHandler, ServerNetHandler,
+                    IOHandler,  AgentIOHandler,  ServerIOHandler in *
            ; simpl in *
            ; repeat break_match)
     ; repeat (prove_eq ; clean)
@@ -74,6 +87,20 @@ Section Bank_Proof.
    ********)
 
   (* [SAFETY]
+   * Error State Unreachable : Over all event-traces, ERROR never appears.
+   *)
+   Theorem error_unreachable :
+     forall s,
+       event_step_star step_async step_async_init (hd s) ->
+       lb_step_execution lb_step_async s ->
+       always (~_ (now (occurred ERROR))) s.
+  Proof using.
+    cofix c. intros. constructor.
+    - unfold not_tl. intuition. admit.
+    - apply c in H ; intuition. invcs H. assumption.
+  Admitted.
+
+  (* [SAFETY]
    * Min Value Balance : Over all traces, the returned account value
    *                     is always greater than the minimum value.
    *)
@@ -109,7 +136,7 @@ Section Bank_Proof.
     match outs with
     | nil                        => True
     | (netO _ (Passed a v)) :: l => v >= 0 /\ (min_value_invariant_outputs l)
-    | _ :: l                     => True /\ (min_value_invariant_outputs l)
+    | _ :: l                     => (min_value_invariant_outputs l)
     end.
 
   Fixpoint min_value_invariant_trace (trace : list (name * (input + list output)))
@@ -118,7 +145,7 @@ Section Bank_Proof.
     | nil                  => True
     | (Agent, inr os) :: l => (min_value_invariant_outputs os)
                            /\ (min_value_invariant_trace l)
-    | _ :: l               => True /\ (min_value_invariant_trace l)
+    | _ :: l               => (min_value_invariant_trace l)
     end.
 
   Lemma min_value_invariant_trace_app :
@@ -126,8 +153,8 @@ Section Bank_Proof.
       min_value_invariant_trace tr1 /\
       min_value_invariant_trace tr2 ->
       min_value_invariant_trace (tr1 ++ tr2).
-  Proof.
-    intros. intuition. induction tr1 ; intuition ; simpl in *.
+  Proof using.
+    intros. induction tr1 ; intuition ; simpl in *.
     repeat break_match ; intuition.
   Qed.
 
@@ -146,9 +173,9 @@ Section Bank_Proof.
   Qed.
 
   Lemma min_value_invariant_server_resp :
-    forall msg st outs st' msgs,
+    forall msg st outs st' msgs lbl,
       min_value_invariant_state (server st) ->
-      ServerNetHandler msg st = (tt, outs, st', msgs) ->
+      ServerNetHandler msg st = (lbl, outs, st', msgs) ->
       (min_value_invariant_state (server st') /\
         (forall d a c v,
           In (d, (netM c (resp (PassMsg a v)))) msgs ->
@@ -185,7 +212,7 @@ Section Bank_Proof.
     - apply min_value_invariant_network ; simpl ; invcs H.
       + break_if ; intuition.
         simplify_bank_handlers ; invcs e ; try constructor
-                               ; intuition ; find_inversion
+                               ; repeat find_inversion ; intuition
                                ; apply min_value_invariant_add_state ; intuition.
         invcs H0. invcs Heqo. case (eq_nat_dec acc a) ; intros ; subst_max.
         * apply NatDictWF.find_mapsto_iff, NatDictWF.add_mapsto_iff in Heqo. intuition.
@@ -193,16 +220,16 @@ Section Bank_Proof.
           apply NatDictWF.find_mapsto_iff, NatDictWF.add_neq_mapsto_iff,
                                            NatDictWF.find_mapsto_iff in Heqo ; intuition.
     (* NetHandler packets *)
-      + intros. unfold NetHandler in H2. rewrite H1 in H3.
-        repeat break_match ; apply in_app_iff in H ; intuition ; invcs H2
-                           ; monad_unfold ; intuition ; repeat break_let
-                           ; try (invcs Heqp1 ; destruct u)
-                           ; try (simplify_bank_handlers ; contradiction)
-                           ; try apply in_app_iff in H4 ; intuition.
-        apply min_value_invariant_server_resp in Heqp0 ; intuition.
-        apply in_map_iff in H4. break_exists. intuition. subst_max.
-        destruct x, n0, m, r ; constructor ; last 1 [ apply H2 in H6 ; intuition ]
-                             ; intuition ; break_exists ; simpl in * ; find_inversion.
+      + intros. basic_unfold. rewrite H1 in H3. repeat break_let. repeat find_inversion.
+        apply in_app_iff in H ; intuition ; invcs Heqp1
+                              ; unfold NetHandler in H4 ; repeat break_match
+                              ; subst_max ; find_inversion ; simpl in * ; intuition
+                              ; try apply in_app_iff in H2 ; intuition.
+        * simplify_bank_handlers ; contradiction.
+        * apply min_value_invariant_server_resp in Heqp1 ; intuition.
+          apply in_map_iff in H2. break_exists. intuition. subst_max.
+          destruct x, n0, m, r ; constructor ; last 1 [ apply H4 in H6 ; intuition ]
+                               ; intuition ; break_exists ; simpl in * ; find_inversion.
     (* NetHandler trace *)
     - simpl. break_match ; intuition. simplify_bank_handlers ; intuition.
     (* IOHandler state *)
@@ -232,18 +259,21 @@ Section Bank_Proof.
   Qed.
   
   Lemma true_in_reachable_min_value :
-    true_in_reachable step_async step_async_init (fun net => min_value_invariant_net net).
-  Proof.
-  intro a. pose proof min_value_invariant a.
-  assert (inductive_invariant step_async step_async_init min_value_invariant_net).
-  - unfold inductive_invariant. split.
-    + apply min_value_invariant_network.
-      * apply min_value_invariant_nil_state.
-      * simpl. intros. inversion H0.
-    + unfold inductive. apply min_value_invariant_step.
-  - find_apply_lem_hyp inductive_invariant_true_in_reachable. apply H0.
+    true_in_reachable step_async step_async_init
+                      (fun net => min_value_invariant_net net).
+  Proof using.
+    intro net. pose proof min_value_invariant net.
+    assert (inductive_invariant step_async step_async_init min_value_invariant_net).
+    - unfold inductive_invariant. split.
+      + apply min_value_invariant_network.
+        * apply min_value_invariant_nil_state.
+        * simpl. intros. inversion H0.
+      + unfold inductive. apply min_value_invariant_step.
+    - find_apply_lem_hyp inductive_invariant_true_in_reachable. apply H0.
   Qed.
 
+  (* [SAFETY]
+   * For every account in the trace, we must have a CREATE input. *)
   Definition accounts_in_trace (trace : list (name * (input + list output)))
                                : list Account :=
     flat_map (fun n_io => match n_io with
@@ -258,8 +288,7 @@ Section Bank_Proof.
                  end)
               trace.
 
-  (* [SAFETY]
-   * For every account in the trace, we must have a CREATE input. *)
+
   Theorem every_account_was_created :
     forall net trace,
       step_async_star step_async_init net trace ->
@@ -269,25 +298,18 @@ Section Bank_Proof.
   (* TODO: Do it. Do it. Do it. *)
   Admitted.
 
-  (* [SAFETY]
-   * Trace Correctness : Simulate the trace on an interpreter and prove that
-   *                     we get equivalent behaviour on the distributed system.
-   *)
+  (* [LIVENESS]
+   * Finite Wait Time: No Agent remains waiting for ever, starting from any
+                       reachable network state.
+     FIXME: Switch to labeled network. *)
+  Theorem finite_wait_time :
+    forall net tr,
+      step_async_star step_async_init net tr ->
+      (nwState net) Agent = agent wait ->
+      (exists net' tr', step_async_star net net' tr' ->
+                        (nwState net') Agent <> agent wait).
+  Proof using.
+    intros.
+  Admitted.
 
-(*  Definition operate (op : Input) (curr : option Value) :=
-    match op with
-    | Timeout          => (curr, curr)
-    | Create   acc     => (curr, curr)
-    | Deposit  acc val => (curr, curr)
-    | Withdraw acc val => (curr, curr)
-    | Check    acc     => (curr, curr)
-    end.
-
-  Fixpoint interpret (acc : Account) (ops : list Input) (init : option Value) :=
-    match ops with
-    | [] => (init, init)
-    | _  => (init, init)
-    end.
-*)
-
-End Bank_Proof.
+End Bank_Proofs.

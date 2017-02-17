@@ -53,6 +53,6 @@ PASS 1001 10
 ...
 ```
 
-(or use `make bank.d.byte` for a debug-build)
+(or use `make bank-dbg.bin` for a debug-build)
 
 [verdi]: https://github.com/uwplse/verdi

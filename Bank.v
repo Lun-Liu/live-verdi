@@ -1,6 +1,7 @@
 From Verdi Require Import
   Verdi
-  HandlerMonad.
+  HandlerMonad
+  LabeledNet.
 
 From Coq Require Import
   FSets.FMapList
@@ -83,45 +84,56 @@ Section Bank.
     repeat decide equality.
   Defined.
 
-  Definition MakeHandler (s : Type) :=
-    GenHandler (Name * NetMsg) s NetOutput unit.
-  Definition AgentStateHandler := MakeHandler AgentState.
-  Definition ServerStateHandler := MakeHandler ServerState.
-  Definition StateHandler := MakeHandler State.
+  Inductive Label :=
+  | Ready
+  | Waiting
+  | Processed
+  | Fulfilled
+  | Nop
+  | ERROR
+  | Silent.
+  Definition LabeledHandler (s : Type) := GenHandler (Name * NetMsg) s NetOutput Label.
+
+  Definition ServerStateHandler := LabeledHandler ServerState.
+  Definition AgentStateHandler := LabeledHandler AgentState.
+  Definition StateHandler := LabeledHandler State.
 
   Definition AgentNetHandler (nm : NetMsg) : AgentStateHandler :=
     state <- get ;;
     let 'netM id m := nm in
     match m with
-    | req  _ => nop
+    | req  _ => ret ERROR
     | resp r =>
         if AState_eq_dec wait state then
           match r with
           | FailMsg         => put fail >> write_output (netO id Failed)
           | PassMsg acc val => put pass >> write_output (netO id (Passed acc val))
-          end
-        else nop
+          end ;; ret Fulfilled
+        else ret Nop
     end.
 
   Definition AgentIOHandler (ni : NetInput) : AgentStateHandler :=
     state <- get ;;
     let 'netI id i := ni in
       if AState_eq_dec wait state
-      then (if Input_eq_dec i Timeout then put fail else write_output (netO id Reject))
-      else (
-            match i with
-            | Timeout          => nop
-            | Create   acc     => put wait ;; send (Server, netM id (req (CreateMsg   acc)))
-            | Deposit  acc val => put wait ;; send (Server, netM id (req (DepositMsg  acc val)))
-            | Withdraw acc val => put wait ;; send (Server, netM id (req (WithdrawMsg acc val)))
-            | Check    acc     => put wait ;; send (Server, netM id (req (CheckMsg    acc)))
-            end).
+      then (if Input_eq_dec i Timeout
+            then put fail ;; ret Ready
+            else (write_output (netO id Reject) ;; ret Nop))
+      else ((if Input_eq_dec i Timeout then nop else put wait) ;;
+            (match i with
+             | Timeout          => nop
+             | Create   acc     => send (Server, netM id (req (CreateMsg   acc)))
+             | Deposit  acc val => send (Server, netM id (req (DepositMsg  acc val)))
+             | Withdraw acc val => send (Server, netM id (req (WithdrawMsg acc val)))
+             | Check    acc     => send (Server, netM id (req (CheckMsg    acc)))
+             end) ;;
+             (if Input_eq_dec i Timeout then ret Nop else ret Waiting)).
 
   Definition ServerNetHandler (nm : NetMsg) : ServerStateHandler :=
     state <- get ;;
     let 'netM id m := nm in
     match m with
-    | resp _ => nop
+    | resp _ => ret Nop
     | req  r =>
         match r with
         | CreateMsg acc =>
@@ -152,10 +164,10 @@ Section Bank.
             | Some val' => send (Agent, netM id (resp (PassMsg acc val')))
             | None      => send (Agent, netM id (resp FailMsg))
             end
-        end
+        end ;; ret Processed
     end.
 
-  Definition ServerIOHandler (ni : NetInput) : ServerStateHandler := nop.
+  Definition ServerIOHandler (ni : NetInput) : ServerStateHandler := ret Nop.
 
   Global Instance bank_base_params : BaseParams :=
   {
@@ -183,41 +195,47 @@ Section Bank.
   Definition NetHandler (dst src : Name) (nm : NetMsg) (s : State) :=
     match (dst , s) with
     | (Agent, agent  astate) =>
-        let '(a,b,c) := runGenHandler_ignore astate (AgentNetHandler nm)
-        in (a, agent b, c)
+        let '(a, b, c, d) := runGenHandler astate (AgentNetHandler nm)
+        in (a, b, agent c, d)
     | (Server, server sstate) =>
-        let '(a,b,c) := runGenHandler_ignore sstate (ServerNetHandler nm)
-        in (a, server b, c)
-    | _ => runGenHandler_ignore s nop
+        let '(a, b, c, d) := runGenHandler sstate (ServerNetHandler nm)
+        in (a, b, server c, d)
+    | _ => (ERROR, [], s, [])
     end.
 
   Definition IOHandler (n : Name) (ni : NetInput) (s : State) :=
     match (n , s) with
     | (Agent, agent astate) =>
-        let '(a,b,c) := runGenHandler_ignore astate (AgentIOHandler ni)
-        in (a, agent b, c)
+        let '(a, b, c, d) := runGenHandler astate (AgentIOHandler ni)
+        in (a, b, agent c, d)
     | (Server, server sstate) =>
-        let '(a,b,c) := runGenHandler_ignore sstate (ServerIOHandler ni)
-        in (a, server b, c)
-    | _ => runGenHandler_ignore s nop
+        let '(a, b, c, d) := runGenHandler sstate (ServerIOHandler ni)
+        in (a, b, server c, d)
+    | _ => (ERROR, [], s, [])
     end.
 
-  Global Instance bank_multi_params : MultiParams bank_base_params :=
+  Global Instance bank_labeled_params : LabeledMultiParams bank_base_params :=
   {
-    name := Name ;
-    name_eq_dec := Name_eq_dec;
+    label := Label;
+    label_silent := Silent;
 
-    msg := NetMsg ;
-    msg_eq_dec := NetMsg_eq_dec;
+    lb_name := Name ;
+    lb_name_eq_dec := Name_eq_dec;
 
-    nodes := Nodes ;
-    no_dup_nodes := no_dup_Nodes ;
-    all_names_nodes := all_Names_Nodes;
+    lb_msg := NetMsg ;
+    lb_msg_eq_dec := NetMsg_eq_dec;
 
-    init_handlers := InitState ;
-    net_handlers := NetHandler ;
-    input_handlers := IOHandler
+    lb_nodes := Nodes ;
+    lb_no_dup_nodes := no_dup_Nodes ;
+    lb_all_names_nodes := all_Names_Nodes;
+
+    lb_init_handlers := InitState ;
+    lb_net_handlers := NetHandler ;
+    lb_input_handlers := IOHandler
   }.
+
+  Global Instance bank_multi_params : MultiParams bank_base_params :=
+    unlabeled_multi_params.
 
   (* FIXME: X_X *)
   Definition reboot (state : State) : State := state.

@@ -1,18 +1,17 @@
-Require Import Verdi.Verdi.
-
 Require Bank.
 
-Require Import
+From Coq Require Import
   ExtrOcamlBasic
   ExtrOcamlNatInt
   ExtrOcamlString.
 
-Require Import
-  Verdi.ExtrOcamlBasicExt
-  Verdi.ExtrOcamlNatIntExt
-  Verdi.ExtrOcamlBool
-  Verdi.ExtrOcamlList
-  Verdi.ExtrOcamlFin.
+From Verdi Require Import
+  Verdi
+  ExtrOcamlBasicExt
+  ExtrOcamlNatIntExt
+  ExtrOcamlBool
+  ExtrOcamlList
+  ExtrOcamlFin.
 
 Definition final_base_params := Bank.bank_base_params.
 Definition final_multi_params := Bank.bank_multi_params.
