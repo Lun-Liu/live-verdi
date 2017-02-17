@@ -33,21 +33,20 @@ Section Bank_Proofs.
                     unlabeled_input_handlers, unlabeled_net_handlers,
                     lb_net_handlers, lb_input_handlers,
                     net_handlers, input_handlers in *
+           ; repeat break_let
            ).
 
-  (* TODO: Try to remove basic_unfold below.
-           Handlers shouldn't generate the above functions. *)
   Ltac simplify_bank_handlers :=
     repeat ( monad_unfold
            ; basic_unfold
            ; unfold InitState,
                     NetHandler, AgentNetHandler, ServerNetHandler,
                     IOHandler,  AgentIOHandler,  ServerIOHandler in *
-           ; simpl in *
-           ; repeat break_match)
-    ; repeat (prove_eq ; clean)
-    ; subst_max
-    ; simpl in *.
+           ; repeat break_match ; simpl in * )
+    ; try solve_by_inversion
+    ; repeat ( repeat (find_inversion ; intuition)
+             ; subst_max ; simpl in * ; intuition )
+    ; repeat clean.
 
   (*******
    * Basic lemmas on steps and traces
@@ -183,7 +182,7 @@ Section Bank_Proofs.
   Proof using.
     intros. split ; intros.
     (* state_values_gt_min_value st' *)
-    - simplify_bank_handlers ; repeat find_inversion ; intuition.
+    - simplify_bank_handlers.
       (* create *)
       + apply (min_value_invariant_add_state st a minValue) ; intuition.
       (* deposit *)
@@ -193,9 +192,7 @@ Section Bank_Proofs.
       + pose proof (min_value_invariant_state_values st a v0) as Hv0. intuition.
         apply (min_value_invariant_add_state st a (v0 - v)) ; intuition.
     (* PassMsg *)
-    - simplify_bank_handlers
-    ; repeat find_inversion
-    ; try (destruct H1 ; try find_inversion ; intuition ; try destruct H0).
+    - simplify_bank_handlers.
       + pose proof (min_value_invariant_state_values st a v1) as Hv1.
         intuition.
       + apply (min_value_invariant_state_values st' a v) ; intuition.
@@ -210,39 +207,31 @@ Section Bank_Proofs.
     intros. invc H0 ; intuition.
     (* NetHandler state *)
     - apply min_value_invariant_network ; simpl ; invcs H.
-      + break_if ; intuition.
-        simplify_bank_handlers ; invcs e ; try constructor
-                               ; repeat find_inversion ; intuition
-                               ; apply min_value_invariant_add_state ; intuition.
-        invcs H0. invcs Heqo. case (eq_nat_dec acc a) ; intros ; subst_max.
-        * apply NatDictWF.find_mapsto_iff, NatDictWF.add_mapsto_iff in Heqo. intuition.
-        * apply (min_value_invariant_state_values st a v0) in H2 ; intuition.
-          apply NatDictWF.find_mapsto_iff, NatDictWF.add_neq_mapsto_iff,
-                                           NatDictWF.find_mapsto_iff in Heqo ; intuition.
+      + simplify_bank_handlers ; apply min_value_invariant_add_state ; intuition.
+        apply (min_value_invariant_state_values s a v0) in Heqo ; intuition.
     (* NetHandler packets *)
-      + intros. basic_unfold. rewrite H1 in H3. repeat break_let. repeat find_inversion.
-        apply in_app_iff in H ; intuition ; invcs Heqp1
-                              ; unfold NetHandler in H4 ; repeat break_match
-                              ; subst_max ; find_inversion ; simpl in * ; intuition
-                              ; try apply in_app_iff in H2 ; intuition.
-        * simplify_bank_handlers ; contradiction.
+      + intros. basic_unfold. rewrite H1 in H3.
+        apply in_app_iff in H ; invcs Heqp1 ; unfold NetHandler in H5
+                              ; repeat break_match ; simpl in * ; subst_max
+                              ; repeat find_inversion ; intuition
+                              ; try apply in_app_iff in H2 ; try apply in_nil in H2
+                              ; intuition.
+        * simplify_bank_handlers.
         * apply min_value_invariant_server_resp in Heqp1 ; intuition.
           apply in_map_iff in H2. break_exists. intuition. subst_max.
           destruct x, n0, m, r ; constructor ; last 1 [ apply H4 in H6 ; intuition ]
                                ; intuition ; break_exists ; simpl in * ; find_inversion.
     (* NetHandler trace *)
-    - simpl. break_match ; intuition. simplify_bank_handlers ; intuition.
+    - simplify_bank_handlers.
     (* IOHandler state *)
     - apply min_value_invariant_network ; simpl ; invcs H.
-      + break_if ; intuition.
-        simplify_bank_handlers ; invcs e ; intuition.
+      + simplify_bank_handlers.
     (* IOHandler packets *)
       + intros. apply in_app_iff in H. intuition.
-        simplify_bank_handlers ; try contradiction ; try invcs e ; intuition
-                               ; constructor ; intuition ; break_exists
-                               ; rewrite <- H in H1 ; invcs H1.
+        simplify_bank_handlers ; constructor ; intuition ; break_exists
+                               ; simpl in * ; find_inversion.
     (* IOHandler trace *)
-    - simpl. break_match ; intuition. simplify_bank_handlers ; intuition.
+    - simplify_bank_handlers.
   Qed.
 
   Theorem min_value_invariant :
@@ -252,12 +241,12 @@ Section Bank_Proofs.
   Proof using.
     intros. find_apply_lem_hyp refl_trans_1n_n1_trace.
     prep_induction H. induction H
-                    ; intros ; subst_max ; intuition ; simplify_bank_handlers ; intuition
+                    ; intros ; simplify_bank_handlers
                     ; try (apply (min_value_invariant_step x' x'' cs') in H1 ; intuition).
     - constructor ; simpl in * ; intuition. constructor.
     - apply (min_value_invariant_trace_app cs cs'). intuition.
   Qed.
-  
+
   Lemma true_in_reachable_min_value :
     true_in_reachable step_async step_async_init
                       (fun net => min_value_invariant_net net).
@@ -267,7 +256,7 @@ Section Bank_Proofs.
     - unfold inductive_invariant. split.
       + apply min_value_invariant_network.
         * apply min_value_invariant_nil_state.
-        * simpl. intros. inversion H0.
+        * intuition. inversion H0.
       + unfold inductive. apply min_value_invariant_step.
     - find_apply_lem_hyp inductive_invariant_true_in_reachable. apply H0.
   Qed.
