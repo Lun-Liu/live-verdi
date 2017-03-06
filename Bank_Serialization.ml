@@ -10,7 +10,7 @@ let invalidInputMessage (c : clientId) : netInput option =
 
 let serializeOutput (out : netOutput) : clientId * string =
   match (Obj.magic out) with
-  | NetO(client, Reject)
+  | NetO(client, Ignore)
       -> (client, sprintf "REJECTED\n")
   | NetO(client, Failed)
       -> (client, sprintf "FAIL\n")

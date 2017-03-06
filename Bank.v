@@ -57,7 +57,7 @@ Section Bank.
   Defined.
 
   Inductive Output :=
-  | Reject
+  | Ignore
   | Failed
   | Passed : Account -> Value -> Output.
 
@@ -88,9 +88,7 @@ Section Bank.
   | Ready
   | Waiting
   | Processed
-  | Fulfilled
   | Nop
-  | ERROR
   | Silent.
   Definition LabeledHandler (s : Type) := GenHandler (Name * NetMsg) s NetOutput Label.
 
@@ -102,23 +100,23 @@ Section Bank.
     state <- get ;;
     let 'netM id m := nm in
     match m with
-    | req  _ => ret ERROR
+    | req  _ => ret Nop
     | resp r =>
         if AState_eq_dec wait state then
           match r with
           | FailMsg         => put fail >> write_output (netO id Failed)
           | PassMsg acc val => put pass >> write_output (netO id (Passed acc val))
-          end ;; ret Fulfilled
-        else ret Nop
+          end ;; ret Ready
+        else ret Ready
     end.
 
   Definition AgentIOHandler (ni : NetInput) : AgentStateHandler :=
     state <- get ;;
     let 'netI id i := ni in
       if AState_eq_dec wait state
-      then (if Input_eq_dec i Timeout
-            then put fail ;; ret Ready
-            else (write_output (netO id Reject) ;; ret Nop))
+      then ((if Input_eq_dec i Timeout
+             then put fail >> (write_output (netO id Failed))
+             else (write_output (netO id Ignore))) ;; ret Ready)
       else ((if Input_eq_dec i Timeout then nop else put wait) ;;
             (match i with
              | Timeout          => nop
@@ -127,7 +125,7 @@ Section Bank.
              | Withdraw acc val => send (Server, netM id (req (WithdrawMsg acc val)))
              | Check    acc     => send (Server, netM id (req (CheckMsg    acc)))
              end) ;;
-             (if Input_eq_dec i Timeout then ret Nop else ret Waiting)).
+             (if Input_eq_dec i Timeout then ret Ready else ret Waiting)).
 
   Definition ServerNetHandler (nm : NetMsg) : ServerStateHandler :=
     state <- get ;;
@@ -200,7 +198,7 @@ Section Bank.
     | (Server, server sstate) =>
         let '(a, b, c, d) := runGenHandler sstate (ServerNetHandler nm)
         in (a, b, server c, d)
-    | _ => (ERROR, [], s, [])
+    | _ => (Nop, [], s, [])
     end.
 
   Definition IOHandler (n : Name) (ni : NetInput) (s : State) :=
@@ -211,7 +209,7 @@ Section Bank.
     | (Server, server sstate) =>
         let '(a, b, c, d) := runGenHandler sstate (ServerIOHandler ni)
         in (a, b, server c, d)
-    | _ => (ERROR, [], s, [])
+    | _ => (Nop, [], s, [])
     end.
 
   Global Instance bank_labeled_params : LabeledMultiParams bank_base_params :=

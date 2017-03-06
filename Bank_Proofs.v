@@ -1,4 +1,4 @@
-Require Import Bank.
+Require Import Bank Bank_Utils.
 
 From Verdi Require Import
   Verdi
@@ -7,7 +7,8 @@ From Verdi Require Import
 
 From InfSeqExt Require Import
   infseq
-  exteq.
+  exteq
+  classical.
 
 From mathcomp Require Import
   ssreflect
@@ -15,38 +16,17 @@ From mathcomp Require Import
   ssrbool.
 
 From Coq Require Import
+  Classes.EquivDec
   FSets.FMapFacts
   Structures.OrderedTypeEx.
 
 Module NatDictWF := WFacts_fun Nat_as_OT NatDict.
 
+Local Arguments update {_} {_} _ _ _ _ _ : simpl never.
+
 Set Bullet Behavior "Strict Subproofs".
 
 Section Bank_Proofs.
-
-  (*******
-   * Tactics
-   *******)
-
-  Ltac basic_unfold :=
-    repeat ( unfold step_async_init,
-                    unlabeled_input_handlers, unlabeled_net_handlers,
-                    lb_net_handlers, lb_input_handlers,
-                    net_handlers, input_handlers in *
-           ; repeat break_let
-           ).
-
-  Ltac simplify_bank_handlers :=
-    repeat ( monad_unfold
-           ; basic_unfold
-           ; unfold InitState,
-                    NetHandler, AgentNetHandler, ServerNetHandler,
-                    IOHandler,  AgentIOHandler,  ServerIOHandler in *
-           ; repeat break_match ; simpl in * )
-    ; try solve_by_inversion
-    ; repeat ( repeat (find_inversion ; intuition)
-             ; subst_max ; simpl in * ; intuition )
-    ; repeat clean.
 
   (*******
    * Basic lemmas on steps and traces
@@ -84,23 +64,8 @@ Section Bank_Proofs.
   (********
    * More complex properties
    ********)
-
   (* [SAFETY]
-   * Error State Unreachable : Over all event-traces, ERROR never appears.
-   *)
-   Theorem error_unreachable :
-     forall s,
-       event_step_star step_async step_async_init (hd s) ->
-       lb_step_execution lb_step_async s ->
-       always (~_ (now (occurred ERROR))) s.
-  Proof using.
-    cofix c. intros. constructor.
-    - unfold not_tl. intuition. admit.
-    - apply c in H ; intuition. invcs H. assumption.
-  Admitted.
-
-  (* [SAFETY]
-   * Min Value Balance : Over all traces, the returned account value
+   * Min Value Balance : Over all traces, the returned account valuecoq
    *                     is always greater than the minimum value.
    *)
   Inductive min_value_invariant_state : State -> Prop :=
@@ -124,12 +89,9 @@ Section Bank_Proofs.
         (not (exists c a v, (pBody pkt) = (netM c (resp (PassMsg a v))))) ->
         min_value_invariant_packet pkt.
 
-  Inductive min_value_invariant_net : network -> Prop :=
-  | min_value_invariant_network :
-      forall net,
-        min_value_invariant_state ((nwState net) Server) ->
-        (forall p, In p (nwPackets net) -> min_value_invariant_packet p) ->
-        min_value_invariant_net net.
+  Definition min_value_invariant_network net :=
+    min_value_invariant_state ((nwState net) Server) /\
+    (forall p, In p (nwPackets net) -> min_value_invariant_packet p).
 
   Fixpoint min_value_invariant_outputs (outs : list output) : Prop :=
     match outs with
@@ -200,36 +162,30 @@ Section Bank_Proofs.
 
   Lemma min_value_invariant_step :
     forall net net' tr,
-      min_value_invariant_net net ->
+      min_value_invariant_network net ->
       step_async net net' tr ->
-      (min_value_invariant_net net' /\ min_value_invariant_trace tr).
+      (min_value_invariant_network net' /\ min_value_invariant_trace tr).
   Proof using.
-    intros. invc H0 ; intuition.
+    intros. unfold min_value_invariant_network in *. invc H0 ; intuition.
     (* NetHandler state *)
-    - apply min_value_invariant_network ; simpl ; invcs H.
-      + simplify_bank_handlers ; apply min_value_invariant_add_state ; intuition.
-        apply (min_value_invariant_state_values s a v0) in Heqo ; intuition.
+    - simpl ; intuition ; simplify_bank_handlers
+                        ; apply min_value_invariant_add_state ; intuition
+                        ; apply (min_value_invariant_state_values s a v0) in Heqo
+                        ; intuition.
     (* NetHandler packets *)
-      + intros. basic_unfold. rewrite H1 in H3.
-        apply in_app_iff in H ; invcs Heqp1 ; unfold NetHandler in H5
-                              ; repeat break_match ; simpl in * ; subst_max
-                              ; repeat find_inversion ; intuition
-                              ; try apply in_app_iff in H2 ; try apply in_nil in H2
-                              ; intuition.
-        * simplify_bank_handlers.
-        * apply min_value_invariant_server_resp in Heqp1 ; intuition.
-          apply in_map_iff in H2. break_exists. intuition. subst_max.
-          destruct x, n0, m, r ; constructor ; last 1 [ apply H4 in H6 ; intuition ]
-                               ; intuition ; break_exists ; simpl in * ; find_inversion.
+    - simplify_bank_handlers
+        ; try ( rewrite H1 in H3 ; pose proof (H3 p0)
+              ; find_apply_lem_hyp in_app_iff ; intuition)
+        ; try ( constructor ; intuition ; break_exists ; simpl in * ; discriminate)
+        ; constructor ; find_apply_lem_hyp min_value_invariant_state_values ; intuition.
     (* NetHandler trace *)
     - simplify_bank_handlers.
     (* IOHandler state *)
-    - apply min_value_invariant_network ; simpl ; invcs H.
-      + simplify_bank_handlers.
+    - simplify_bank_handlers.
     (* IOHandler packets *)
-      + intros. apply in_app_iff in H. intuition.
-        simplify_bank_handlers ; constructor ; intuition ; break_exists
-                               ; simpl in * ; find_inversion.
+    - simpl in *. apply in_app_iff in H. intuition.
+      simplify_bank_handlers ; constructor ; intuition ; break_exists
+                             ; simpl in * ; find_inversion.
     (* IOHandler trace *)
     - simplify_bank_handlers.
   Qed.
@@ -237,7 +193,7 @@ Section Bank_Proofs.
   Theorem min_value_invariant :
     forall net tr,
       step_async_star step_async_init net tr ->
-      (min_value_invariant_net net /\ min_value_invariant_trace tr).
+      (min_value_invariant_network net /\ min_value_invariant_trace tr).
   Proof using.
     intros. find_apply_lem_hyp refl_trans_1n_n1_trace.
     prep_induction H. induction H
@@ -249,56 +205,123 @@ Section Bank_Proofs.
 
   Lemma true_in_reachable_min_value :
     true_in_reachable step_async step_async_init
-                      (fun net => min_value_invariant_net net).
+                      (fun net => min_value_invariant_network net).
   Proof using.
     intro net. pose proof min_value_invariant net.
-    assert (inductive_invariant step_async step_async_init min_value_invariant_net).
+    assert (inductive_invariant step_async step_async_init min_value_invariant_network).
     - unfold inductive_invariant. split.
-      + apply min_value_invariant_network.
-        * apply min_value_invariant_nil_state.
-        * intuition. inversion H0.
+      + unfold min_value_invariant_network. intuition.
+        apply min_value_invariant_nil_state.
       + unfold inductive. apply min_value_invariant_step.
     - find_apply_lem_hyp inductive_invariant_true_in_reachable. apply H0.
   Qed.
 
-  (* [SAFETY]
-   * For every account in the trace, we must have a CREATE input. *)
-  Definition accounts_in_trace (trace : list (name * (input + list output)))
-                               : list Account :=
-    flat_map (fun n_io => match n_io with
-                          | (Server, _)    => nil
-                          | (Agent, inl _) => nil
-                          | (Agent, inr listO) =>
-                              filterMap (fun o => match o with
-                                                  | netO _ (Passed a _) => Some a
-                                                  | _                   => None
-                                                  end)
-                                        listO
-                 end)
-              trace.
-
-
-  Theorem every_account_was_created :
-    forall net trace,
-      step_async_star step_async_init net trace ->
-      forall a, In a (accounts_in_trace trace) ->
-      exists n c, In (n, inl (netI c (Create a))) trace.
-  Proof using.
-  (* TODO: Do it. Do it. Do it. *)
-  Admitted.
-
   (* [LIVENESS]
    * Finite Wait Time: No Agent remains waiting for ever, starting from any
-                       reachable network state.
-     FIXME: Switch to labeled network. *)
-  Theorem finite_wait_time :
-    forall net tr,
-      step_async_star step_async_init net tr ->
-      (nwState net) Agent = agent wait ->
-      (exists net' tr', step_async_star net net' tr' ->
-                        (nwState net') Agent <> agent wait).
+                       reachable network state. *)
+  Lemma IOHandler_labels :
+    forall n ni s s' l os ms,
+      IOHandler n ni s = (l, os, s', ms) ->
+      (exists id:ClientId,
+        (l = Ready /\ ms = [] /\
+                     (s' = s /\ os = [] \/
+                      s' = agent fail /\ os = [(netO id Failed)] \/
+                      s' = agent wait /\ os = [(netO id Ignore)])) \/
+        (exists r : ReqMsg,
+          l = Waiting /\ os = [] /\ s' = agent wait /\
+                         ms = [(Server, (netM id (req r)))])) \/
+      (l = Nop /\ os = [] /\ ms = [] /\ s = s').
   Proof using.
-    intros.
+    intros. simplify_bank_handlers ; left ; exists c ; intuition
+                                   ; right ; eexists ; intuition.
+  Qed.
+
+  Lemma NetHandler_labels :
+    forall dst src nm s s' l os ms,
+      NetHandler dst src nm s = (l, os, s', ms) ->
+      (exists id : ClientId,
+        (l = Ready /\ ms = [] /\
+                     ((s = s' /\ os = []) \/
+                      (s' = agent fail /\ os = [(netO id Failed)]) \/
+                      (exists a v,
+                        s' = agent pass /\ os = [(netO id (Passed a v))]))) \/
+        (exists r : RespMsg,
+          l = Processed /\ os = [] /\ ms = [(Agent, netM id (resp r))])) \/
+      (l = Nop /\ os = [] /\ ms = [] /\ s = s').
+  Proof using.
+    intros. simplify_bank_handlers ; left ; exists c ;  intuition
+                                   ; first ( left ; intuition ; right ; right
+                                                  ; repeat eexists )
+                                   ; right ; repeat eexists.
+  Qed.
+
+  Lemma Server_RespMsg_enables_Ready :
+    forall id r,
+      message_enables_label (mkPacket Server Agent (netM id (resp r))) Ready.
+  Proof using.
+    unfold message_enables_label. intros.
+    find_apply_lem_hyp in_split. repeat (break_exists ; intuition).
+    destruct (step_star_consistent_state net) ; try exists x1 ; intuition.
+    repeat break_exists. destruct (AState_eq_dec x2 wait) ; last first.
+    - repeat eexists. apply LabeledStepAsync_deliver with (xs := x) (ys := x0)
+                                                          (d := agent x2) (l := []) ; eauto.
+      simplify_bank_handlers ; rewrite H1 in Heqd ; invcs Heqd ; intuition.
+    - destruct r ; repeat eexists ;
+      [ apply LabeledStepAsync_deliver with (xs := x) (ys := x0) (d := agent fail) (l := [])
+      | apply LabeledStepAsync_deliver with (xs := x) (ys := x0) (d := agent pass) (l := [])]
+      ; eauto ; simplify_bank_handlers ; rewrite H1 in Heqd ; invcs Heqd ; intuition
+      ; (pose proof (H2 s) ; intuition).
+  Qed.
+
+  Lemma Server_RespMsg_delivered_Ready :
+    forall id r,
+      message_delivered_label (mkPacket Server Agent (netM id (resp r))) Ready.
+  Proof using.
+    unfold message_delivered_label. intros. invcs H. invcs H0 ; intuition.
+    find_eapply_lem_hyp In_split_not_In ; eauto.
+ Admitted.
+
+  Lemma RespMsg_in_network_eventually_Ready :
+    forall s r id,
+      event_step_star step_async step_async_init (hd s) ->
+      lb_step_execution lb_step_async s ->
+      weak_fairness lb_step_async label_silent s ->
+      In (mkPacket Server Agent (netM id (resp r))) (nwPackets (evt_a (hd s))) ->
+      eventually (now (occurred Ready)) s.
+  Proof using.
+    intros. eapply message_labels_eventually_occur
+          ; eauto using Server_RespMsg_enables_Ready, Server_RespMsg_delivered_Ready.
+    unfold label_silent. simpl. congruence.
+  Qed.
+
+  Lemma Agent_ReqMsg_enables_Processed :
+    forall id r,
+      message_enables_label (mkPacket Agent Server (netM id (req r))) Processed.
+  Proof using.
+    unfold message_enables_label. intros.
+    find_apply_lem_hyp in_split. repeat (break_exists ; intuition).
+    destruct (step_star_consistent_state net) ; try exists x1 ; intuition.
   Admitted.
+
+  Lemma Agent_ReqMsg_delivered_Processed :
+    forall id r,
+      message_delivered_label (mkPacket Agent Server (netM id (req r))) Processed.
+  Proof using.
+    unfold message_delivered_label. intros. invcs H. invcs H0 ; intuition.
+    find_eapply_lem_hyp In_split_not_In ; eauto.
+  Admitted.
+
+  Lemma ReqMsg_in_network_eventually_Processed :
+    forall s r id,
+      event_step_star step_async step_async_init (hd s) ->
+      lb_step_execution lb_step_async s ->
+      weak_fairness lb_step_async label_silent s ->
+      In (mkPacket Agent Server (netM id (req r))) (nwPackets (evt_a (hd s))) ->
+      eventually (now (occurred Processed)) s.
+  Proof using.
+    intros. eapply message_labels_eventually_occur
+          ; eauto using Agent_ReqMsg_enables_Processed, Agent_ReqMsg_delivered_Processed.
+    unfold label_silent. simpl. congruence.
+  Qed.
 
 End Bank_Proofs.
