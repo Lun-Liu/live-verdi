@@ -12,3 +12,4 @@ _build
 *.aux
 *.vio
 *_Coq.*
+*.crashcoqide

@@ -65,8 +65,71 @@ Definition initialized_network (net:network) :=
   exists tr, step_async_star step_async_init net tr.
 
 Definition initialized_eventseq (s:infseq (event network label (name * (input + list output)))) :=
-  event_step_star step_async step_async_init (hd s).
+  event_step_star step_async step_async_init (hd s) /\
+  lb_step_execution lb_step_async s.
 
+Lemma initialized_event_network :
+  forall (e:event network label (name * (input + list output))),
+    event_step_star step_async step_async_init e ->
+    initialized_network (evt_a e).
+Proof using.
+  intuition. find_apply_lem_hyp refl_trans_1n_n1_trace.
+  destruct e. simpl in *.
+  prep_induction H. induction H ; intuition ; subst_max.
+  - exists []. constructor.
+  - unfold initialized_network in *. break_exists.
+    exists (x ++ cs'). apply RT1n_step with (y := x') ; intuition.
+Qed.
+
+Lemma initialized_eventseq_network :
+  forall s,
+    initialized_eventseq s ->
+    always (now (fun e => initialized_network (evt_a e))) s.
+Proof using.
+  unfold initialized_eventseq. intuition.
+  pose proof (step_async_star_lb_step_execution H0 H1).
+  generalize dependent H. clear H0 H1. generalize dependent s.
+  cofix c. destruct s. constructor.
+  - apply always_now in H. simpl in *. apply initialized_event_network ; intuition.
+  - apply c. simpl. apply always_tl in H. simpl in H. apply H.
+Qed.
+
+
+Lemma IOHandler_labels :
+  forall n ni s s' l os ms,
+    IOHandler n ni s = (l, os, s', ms) ->
+    (exists id:ClientId,
+      (l = Ready /\ ms = [] /\
+                   (s' = s /\ os = [] \/
+                    s' = agent fail /\ os = [(netO id Failed)] \/
+                    s' = agent wait /\ os = [(netO id Ignore)])) \/
+      (exists r : ReqMsg,
+        l = Waiting /\ os = [] /\ s' = agent wait /\
+                       ms = [(Server, (netM id (req r)))])) \/
+    (l = Nop /\ os = [] /\ ms = [] /\ s = s').
+Proof using.
+  intros. simplify_bank_handlers ; left ; exists c ; intuition
+                                 ; right ; eexists ; intuition.
+Qed.
+
+Lemma NetHandler_labels :
+  forall dst src nm s s' l os ms,
+    NetHandler dst src nm s = (l, os, s', ms) ->
+    (exists id : ClientId,
+      (l = Ready /\ ms = [] /\
+                   ((s = s' /\ os = []) \/
+                    (s' = agent fail /\ os = [(netO id Failed)]) \/
+                    (exists a v,
+                      s' = agent pass /\ os = [(netO id (Passed a v))]))) \/
+      (exists r : RespMsg,
+        l = Processed /\ os = [] /\ ms = [(Agent, netM id (resp r))])) \/
+    (l = Nop /\ os = [] /\ ms = [] /\ s = s').
+Proof using.
+  intros. simplify_bank_handlers ; left ; exists c ;  intuition
+                                 ; first ( left ; intuition ; right ; right
+                                                ; repeat eexists )
+                                 ; right ; repeat eexists.
+Qed.
 
 Lemma step_star_consistent_state :
   forall net,
@@ -84,6 +147,7 @@ Proof using.
                 ; unfold update ; simpl ; eauto
                 ; repeat break_exists ; unfold update in * ; simpl in * ; discriminate.
 Qed.
+
 
 Definition message_enables_label p l :=
   forall net,
@@ -105,27 +169,28 @@ Lemma messages_trigger_labels :
     message_delivered_label p l ->
     forall s,
       initialized_eventseq s ->
-      lb_step_execution lb_step_async s ->
       In p (nwPackets (evt_a (hd s))) ->
       weak_until (now (enabled lb_step_async l))
                  (now (occurred l))
                  s.
 Proof using.
-    intros l p Henables Hdelivered. unfold initialized_eventseq.
-    cofix c. destruct s, e.
-    intros Hstar Hexec Hin. invcs Hexec.
-    destruct (label_eq_dec l evt_l) ; subst_max.
+    intros l p Henables Hdelivered. cofix c. intros.
+    assert (H' := H). apply initialized_eventseq_network in H.
+    destruct s,e. simpl in *. destruct (label_eq_dec l evt_l) ; subst_max.
     - apply W0. easy.
     - apply W_tl ; simpl.
-      + unfold message_enables_label, initialized_network in *.
-        unfold enabled. simpl. now eauto.
-      + apply c ; simpl ; intuition.
-        * unfold event_step_star in *. unfold bank_multi_params. rewrite H2.
-          apply (step_async_star_lb_step_reachable Hstar H1).
+      + apply always_now in H. simpl in H. 
+        unfold message_enables_label, initialized_network in *.
+        unfold enabled. simpl. break_exists. now eauto.
+      + apply c ; unfold initialized_eventseq in * ; break_and ; invcs H2 ; intuition.
+        * unfold event_step_star in *. unfold bank_multi_params.
+          rewrite H6. apply (step_async_star_lb_step_reachable H1 H5).
         * destruct (In_dec packet_eq_dec
-                         p (nwPackets (LabeledNet.evt_a e'))) ; intuition.
-          unfold message_delivered_label in *.
-Admitted.
+                           p (nwPackets (LabeledNet.evt_a e'))) ; intuition.
+          unfold message_delivered_label, message_enables_label in *.
+          apply always_now in H. simpl in H. intuition.
+          pose proof (Hdelivered evt_l evt_a (LabeledNet.evt_a e') tr). intuition.
+Admitted. (* WHY??!! ... *)
 
 Lemma message_labels_eventually_occur :
   forall l p,

@@ -219,42 +219,6 @@ Section Bank_Proofs.
   (* [LIVENESS]
    * Finite Wait Time: No Agent remains waiting for ever, starting from any
                        reachable network state. *)
-  Lemma IOHandler_labels :
-    forall n ni s s' l os ms,
-      IOHandler n ni s = (l, os, s', ms) ->
-      (exists id:ClientId,
-        (l = Ready /\ ms = [] /\
-                     (s' = s /\ os = [] \/
-                      s' = agent fail /\ os = [(netO id Failed)] \/
-                      s' = agent wait /\ os = [(netO id Ignore)])) \/
-        (exists r : ReqMsg,
-          l = Waiting /\ os = [] /\ s' = agent wait /\
-                         ms = [(Server, (netM id (req r)))])) \/
-      (l = Nop /\ os = [] /\ ms = [] /\ s = s').
-  Proof using.
-    intros. simplify_bank_handlers ; left ; exists c ; intuition
-                                   ; right ; eexists ; intuition.
-  Qed.
-
-  Lemma NetHandler_labels :
-    forall dst src nm s s' l os ms,
-      NetHandler dst src nm s = (l, os, s', ms) ->
-      (exists id : ClientId,
-        (l = Ready /\ ms = [] /\
-                     ((s = s' /\ os = []) \/
-                      (s' = agent fail /\ os = [(netO id Failed)]) \/
-                      (exists a v,
-                        s' = agent pass /\ os = [(netO id (Passed a v))]))) \/
-        (exists r : RespMsg,
-          l = Processed /\ os = [] /\ ms = [(Agent, netM id (resp r))])) \/
-      (l = Nop /\ os = [] /\ ms = [] /\ s = s').
-  Proof using.
-    intros. simplify_bank_handlers ; left ; exists c ;  intuition
-                                   ; first ( left ; intuition ; right ; right
-                                                  ; repeat eexists )
-                                   ; right ; repeat eexists.
-  Qed.
-
   Lemma Server_RespMsg_enables_Ready :
     forall id r,
       message_enables_label (mkPacket Server Agent (netM id (resp r))) Ready.
@@ -277,19 +241,22 @@ Section Bank_Proofs.
     forall id r,
       message_delivered_label (mkPacket Server Agent (netM id (resp r))) Ready.
   Proof using.
-    unfold message_delivered_label. intros. invcs H. invcs H0 ; intuition.
-    find_eapply_lem_hyp In_split_not_In ; eauto.
+    unfold message_delivered_label. unfold initialized_network. intros. break_exists.
+    invcs H0 ; intuition. apply NetHandler_labels in H4.
+    repeat ( break_exists ; intuition ; subst_max ; simpl in * ).
+    - admit.
+    - rewrite H3 in H1. intuition.
  Admitted.
 
   Lemma RespMsg_in_network_eventually_Ready :
     forall s r id,
-      event_step_star step_async step_async_init (hd s) ->
-      lb_step_execution lb_step_async s ->
+      initialized_eventseq s ->
       weak_fairness lb_step_async label_silent s ->
       In (mkPacket Server Agent (netM id (resp r))) (nwPackets (evt_a (hd s))) ->
       eventually (now (occurred Ready)) s.
   Proof using.
-    intros. eapply message_labels_eventually_occur
+    intros. unfold initialized_eventseq in *.
+    eapply message_labels_eventually_occur
           ; eauto using Server_RespMsg_enables_Ready, Server_RespMsg_delivered_Ready.
     unfold label_silent. simpl. congruence.
   Qed.
