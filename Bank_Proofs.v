@@ -229,7 +229,7 @@ Section Bank_Proofs.
     repeat break_exists. destruct (AState_eq_dec x2 wait) ; last first.
     - repeat eexists. apply LabeledStepAsync_deliver with (xs := x) (ys := x0)
                                                           (d := agent x2) (l := []) ; eauto.
-      simplify_bank_handlers ; rewrite H1 in Heqd ; invcs Heqd ; intuition.
+      simplify_bank_handlers; rewrite H1 in Heqd ; invcs Heqd ; intuition.
     - destruct r ; repeat eexists ;
       [ apply LabeledStepAsync_deliver with (xs := x) (ys := x0) (d := agent fail) (l := [])
       | apply LabeledStepAsync_deliver with (xs := x) (ys := x0) (d := agent pass) (l := [])]
@@ -241,12 +241,15 @@ Section Bank_Proofs.
     forall id r,
       message_delivered_label (mkPacket Server Agent (netM id (resp r))) Ready.
   Proof using.
-    unfold message_delivered_label. unfold initialized_network. intros. break_exists.
-    invcs H0 ; intuition. apply NetHandler_labels in H4.
-    repeat ( break_exists ; intuition ; subst_max ; simpl in * ).
-    - admit.
-    - rewrite H3 in H1. intuition.
- Admitted.
+    unfold message_delivered_label. intros. invc H0; intuition.
+    - rewrite H3 in H1.
+      find_eapply_lem_hyp In_split_not_In; eauto.
+      clear H2. subst. monad_unfold. simpl in *.
+      handler_unfold. repeat break_match; repeat find_inversion; auto.
+      apply step_star_consistent_state in H. intuition.
+      apply H1 in Heqd0. inversion Heqd0.
+    - find_false. apply in_app_iff; auto.
+  Qed.
 
   Lemma RespMsg_in_network_eventually_Ready :
     forall s r id,
@@ -259,7 +262,7 @@ Section Bank_Proofs.
     eapply message_labels_eventually_occur
           ; eauto using Server_RespMsg_enables_Ready, Server_RespMsg_delivered_Ready.
     unfold label_silent. simpl. congruence.
-  Qed.
+  Admitted.
 
   Lemma Agent_ReqMsg_enables_Processed :
     forall id r,
@@ -269,14 +272,21 @@ Section Bank_Proofs.
     find_apply_lem_hyp in_split. repeat (break_exists ; intuition).
     destruct (step_star_consistent_state net) ; try exists x1 ; intuition.
   Admitted.
+    
 
   Lemma Agent_ReqMsg_delivered_Processed :
     forall id r,
       message_delivered_label (mkPacket Agent Server (netM id (req r))) Processed.
   Proof using.
-    unfold message_delivered_label. intros. invcs H. invcs H0 ; intuition.
-    find_eapply_lem_hyp In_split_not_In ; eauto.
-  Admitted.
+    unfold message_delivered_label. intros. invc H0; intuition.
+    - rewrite H3 in H1.
+      find_eapply_lem_hyp In_split_not_In; eauto.
+      clear H2. subst. monad_unfold. simpl in *.
+      handler_unfold. repeat break_match; repeat find_inversion; auto.
+      apply step_star_consistent_state in H. intuition.
+      apply H4 in Heqd0. inversion Heqd0.
+    - find_false. apply in_app_iff; auto.
+  Qed.
 
   Lemma ReqMsg_in_network_eventually_Processed :
     forall s r id,
@@ -289,6 +299,6 @@ Section Bank_Proofs.
     intros. eapply message_labels_eventually_occur
           ; eauto using Agent_ReqMsg_enables_Processed, Agent_ReqMsg_delivered_Processed.
     unfold label_silent. simpl. congruence.
-  Qed.
+  Admitted.
 
 End Bank_Proofs.

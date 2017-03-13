@@ -47,6 +47,14 @@ Ltac basic_unfold :=
                   net_handlers, input_handlers in *
          ; repeat break_let
          ).
+         
+Ltac handler_unfold :=
+  repeat (monad_unfold; unfold NetHandler,
+                                 IOHandler,
+                                 ServerNetHandler,
+                                 AgentNetHandler,
+                                 AgentIOHandler,
+                                 ServerIOHandler in *).
 
 Ltac simplify_bank_handlers :=
   repeat ( monad_unfold
