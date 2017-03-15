@@ -599,25 +599,27 @@ Section LabeledSeqNumCorrect.
   
   
   (**Liveness Lemmas*)
-  (*FIX ME: Implement reverting instead use this dummy one*)
+  (*FIXME: Implement reverting instead use this dummy one*)
 
   Definition revertSeq (s: infseq (event network label (name * (input + list output)))) : 
   infseq (event network label (name * (input + list output))) :=
     s.
 
-  (*Do we need lb_step_dup somewhere??*)
-  Definition eventually_in_lb step init P Q:=
+  (*FIXME: REPLACE THIS DUMMY ONE*)
+  Definition lb_step_dup := lb_step_async.
+  
+  Definition eventually_in_lb step init  lb_step  P Q:=
     forall s,
       event_step_star step init (hd s) ->
-      lb_step_execution lb_step_async s ->
+      lb_step_execution lb_step s ->
       weak_fairness lb_step_async label_silent s ->
       P s ->
       eventually Q s.
-      
+
   Lemma eventually_lb_transform :
     forall P Q,
-      eventually_in_lb step_async step_async_init P Q ->
-      eventually_in_lb step_dup step_async_init 
+      eventually_in_lb step_async step_async_init lb_step_async P Q ->
+      eventually_in_lb step_dup step_async_init lb_step_dup
         (fun s => P (revertSeq s)) (fun s => Q (revertSeq s)).
   Proof using.
   Admitted.
