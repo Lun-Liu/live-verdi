@@ -4,6 +4,11 @@ Require Import LabeledSeqNum.
 
 Require Import FunctionalExtensionality.
 
+From InfSeqExt Require Import
+  infseq
+  exteq
+  classical.
+
 
 Section LabeledSeqNumCorrect.
   Context {orig_base_params : BaseParams}.
@@ -591,5 +596,30 @@ Section LabeledSeqNumCorrect.
     - break_exists. eauto.
     - repeat find_rewrite. auto.
   Qed.
+  
+  
+  (**Liveness Lemmas*)
+  (*FIX ME: Implement reverting instead use this dummy one*)
+
+  Definition revertSeq (s: infseq (event network label (name * (input + list output)))) : 
+  infseq (event network label (name * (input + list output))) :=
+    s.
+
+  (*Do we need lb_step_dup somewhere??*)
+  Definition eventually_in_lb step init P Q:=
+    forall s,
+      event_step_star step init (hd s) ->
+      lb_step_execution lb_step_async s ->
+      weak_fairness lb_step_async label_silent s ->
+      P s ->
+      eventually Q s.
+      
+  Lemma eventually_lb_transform :
+    forall P Q,
+      eventually_in_lb step_async step_async_init P Q ->
+      eventually_in_lb step_dup step_async_init 
+        (fun s => P (revertSeq s)) (fun s => Q (revertSeq s)).
+  Proof using.
+  Admitted.
 
 End LabeledSeqNumCorrect.
