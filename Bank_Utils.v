@@ -45,24 +45,15 @@ Ltac basic_unfold :=
                   unlabeled_input_handlers, unlabeled_net_handlers,
                   lb_net_handlers, lb_input_handlers,
                   net_handlers, input_handlers in *
-         ; repeat break_let
-         ).
-         
+         ; repeat break_let).
+
 Ltac handler_unfold :=
-  repeat (monad_unfold; unfold NetHandler,
-                                 IOHandler,
-                                 ServerNetHandler,
-                                 AgentNetHandler,
-                                 AgentIOHandler,
-                                 ServerIOHandler in *).
+  repeat (monad_unfold; unfold NetHandler, ServerNetHandler, AgentNetHandler,
+                               IOHandler, AgentIOHandler, ServerIOHandler in *).
 
 Ltac simplify_bank_handlers :=
-  repeat ( monad_unfold
-         ; basic_unfold
-         ; unfold InitState,
-                  NetHandler, AgentNetHandler, ServerNetHandler,
-                  IOHandler,  AgentIOHandler,  ServerIOHandler in *
-         ; repeat break_match ; simpl in * )
+  repeat ( basic_unfold ; handler_unfold ; unfold InitState in *
+         ; repeat break_match ; simpl in *)
   ; try solve_by_inversion
   ; repeat ( repeat (find_inversion ; intuition)
            ; subst_max ; simpl in * ; intuition )

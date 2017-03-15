@@ -1,11 +1,10 @@
-Require Import Verdi.Verdi Verdi.LabeledNet Verdi.SeqNum.
-
-Require Import LabeledSeqNum.
+Require Import Verdi.Verdi.
 
 Require Import FunctionalExtensionality.
 
+Require Import Verdi.SeqNum.
 
-Section LabeledSeqNumCorrect.
+Section SeqNumCorrect.
   Context {orig_base_params : BaseParams}.
   Context {orig_multi_params : MultiParams orig_base_params}.
 
@@ -589,4 +588,4 @@ Section LabeledSeqNumCorrect.
     - repeat find_rewrite. auto.
   Qed.
 
-End LabeledSeqNumCorrect.
+End SeqNumCorrect.

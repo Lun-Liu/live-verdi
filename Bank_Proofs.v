@@ -258,11 +258,11 @@ Section Bank_Proofs.
       In (mkPacket Server Agent (netM id (resp r))) (nwPackets (evt_a (hd s))) ->
       eventually (now (occurred Ready)) s.
   Proof using.
-    intros. unfold initialized_eventseq in *.
+    intros. unfold initialized_eventseq in *. intuition.
     eapply message_labels_eventually_occur
           ; eauto using Server_RespMsg_enables_Ready, Server_RespMsg_delivered_Ready.
-    unfold label_silent. simpl. congruence.
-  Admitted.
+    unfold label_silent. simpl. congruence. unfold initialized_eventseq. intuition.
+  Qed.
 
   Lemma Agent_ReqMsg_enables_Processed :
     forall id r,
@@ -272,7 +272,6 @@ Section Bank_Proofs.
     find_apply_lem_hyp in_split. repeat (break_exists ; intuition).
     destruct (step_star_consistent_state net) ; try exists x1 ; intuition.
   Admitted.
-    
 
   Lemma Agent_ReqMsg_delivered_Processed :
     forall id r,
