@@ -8,7 +8,7 @@ COQ_QUICK = $(COQ) -quick
 
 
 BANK_EXTRACT    = Bank.v Bank_Extract.v
-BANK_PROVE      = Bank.v Bank_Utils.v Bank_Proofs.v
+BANK_PROVE      = Bank.v Bank_Utils.v Bank_Proofs.v LabeledSeqNum.v LabeledSeqNumCorrect.v
 BANK_SN_EXTRACT = Bank.v Bank_SN.v Bank_SN_Extract.v
 BANK_SN_PROVE   = $(BANK_PROVE) Bank_SN.v Bank_SN_Proofs.v
 
