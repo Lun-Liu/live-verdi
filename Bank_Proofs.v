@@ -261,7 +261,8 @@ Section Bank_Proofs.
     intros. unfold initialized_eventseq in *. intuition.
     eapply message_labels_eventually_occur
           ; eauto using Server_RespMsg_enables_Ready, Server_RespMsg_delivered_Ready.
-    unfold label_silent. simpl. congruence. unfold initialized_eventseq. intuition.
+    - unfold label_silent. simpl. congruence.
+    - unfold initialized_eventseq. intuition.
   Qed.
 
   Lemma Agent_ReqMsg_enables_Processed :
@@ -289,15 +290,49 @@ Section Bank_Proofs.
 
   Lemma ReqMsg_in_network_eventually_Processed :
     forall s r id,
-      event_step_star step_async step_async_init (hd s) ->
-      lb_step_execution lb_step_async s ->
+      initialized_eventseq s ->
       weak_fairness lb_step_async label_silent s ->
       In (mkPacket Agent Server (netM id (req r))) (nwPackets (evt_a (hd s))) ->
       eventually (now (occurred Processed)) s.
   Proof using.
+    unfold initialized_eventseq.
     intros. eapply message_labels_eventually_occur
           ; eauto using Agent_ReqMsg_enables_Processed, Agent_ReqMsg_delivered_Processed.
-    unfold label_silent. simpl. congruence.
+    - unfold label_silent. simpl. congruence.
+    - unfold initialized_eventseq. intuition.
+  Qed.
+
+  Lemma Waiting_ReqMsg :
+    forall s,
+      initialized_eventseq s ->
+      now (occurred Waiting) s ->
+      exists id r, next (fun s => In (mkPacket Agent Server (netM id (req r)))
+                                     (nwPackets (evt_a (hd s))))
+                                     s.
+  Proof using.
   Admitted.
+
+  Lemma initialized_eventseq_invar :
+    forall e s,
+      initialized_eventseq (Cons e s) ->
+      initialized_eventseq s.
+  Proof using.
+  Admitted.
+
+  Theorem Waiting_eventually_Processed :
+    forall s,
+      initialized_eventseq s ->
+      weak_fairness lb_step_async label_silent s ->
+      now (occurred Waiting) s ->
+      eventually (now (occurred Processed)) s.
+  Proof using.
+    intros [e s]. intuition.
+    apply Waiting_ReqMsg in H1 ; intuition. break_exists.
+    unfold next in *.
+    apply ReqMsg_in_network_eventually_Processed in H1 ; intuition.
+    - apply E_next. intuition.
+    - apply (initialized_eventseq_invar e s) ; intuition.
+    - apply (weak_fairness_invar H0).
+  Qed.
 
 End Bank_Proofs.

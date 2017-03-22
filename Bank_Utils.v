@@ -56,7 +56,7 @@ Ltac simplify_bank_handlers :=
          ; repeat break_match ; simpl in *)
   ; try solve_by_inversion
   ; repeat ( repeat (find_inversion ; intuition)
-           ; subst_max ; simpl in * ; intuition )
+           ; subst_max ; simpl in * ; intuition)
   ; repeat clean.
 
 
