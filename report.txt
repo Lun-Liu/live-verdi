@@ -2,6 +2,60 @@ Recap the problem and motivation. This part should be brief, since we've already
 
 Briefly describe your overall approach.  A small concrete example snippet or two would be very helpful.
 
+As proposed in the porposal, our goal is to demonstrate verification of liveness properties of distributed systems using Verdi, by extending the framework as needed. The general apporach is to implement the system in coq as Gallina functions, formalize and prove properties about it, then apply the transformer and prove the transformer can preserve the properties.
+
+As a concrete example, we can have a simple banking system which has a server and an agent (the ATM machine). Agent can send requests to server and server will handle the incoming request, process the request and respond to agent. We can model this system as a distributed system that has two nodes. Nodes talk to each other by sending messages. They can also handle IO to/ from the system. (In this example only agent does the real IO). 
+
+Network semantics decide how network and packets behave. For the simple network semantic, packets can be reordered but will never be lost or duplicated. Network semantics also define what kind of the internal information is visible. For example, if someone wants to reason about liveness properties, he/ she might as well use the Labeled network semantics which export traces of lables so it's easy to reason about transition of states.
+
+Safety properties of this system under the simple network semantic would be something like "an account can never have value less than minimum value", and we can formalize it as
+    Theorem min_value_invariant :
+        forall net tr,
+              step_async_star step_async_init net tr ->
+              (min_value_invariant_network net /\ min_value_invariant_trace tr).
+
+      Lemma true_in_reachable_min_value :
+          true_in_reachable step_async step_async_init
+          (fun net => min_value_invariant_network net).
+
+An example liveness property of this system is "if agent sends a request, it will eventually receive a response", we can formalize it as
+  Theorem Waiting_eventually_Processed :
+      forall s,
+            initialized_eventseq s ->
+            weak_fairness lb_step_async label_silent s ->
+            now (occurred Waiting) s ->
+            eventually (now (occurred Processed)) s.
+
+We can prove those systems under the simple network semantic. Then we can apply transformers to lift this system to a network semantics with faulting senarios.
+
+Transformers are basically wrappers that can be applied on base systems. Every transformer can handle specific faulting scenario of network in a standard way. For example, a sequence number transformer is to handle duplicate network packets. Whenever a packet is received, the transformer will first deal with the sequence numbering part then the handler of the base system will be called. Therefore, application level properties and transformer guarantee proofs can be orthogonal, and the programmers of distributed systems only have to prove the base system properties.
+
+In the bank example, the safety transform lemma can be formalized as
+
+  Theorem true_in_reachable_transform :
+      forall P,
+            true_in_reachable step_async step_async_init P ->
+            true_in_reachable step_dup step_async_init (fun net => P (revertNetwork net)).
+
+The liveness transform lemma can be formalized as 
+
+  Definition eventually_in_lb step init  lb_step  P Q:=
+      forall s,
+            event_step_star step init (hd s) ->
+            lb_step_execution lb_step s ->
+            weak_fairness lb_step_async label_silent s ->
+            P s ->
+            eventually Q s.
+
+  Lemma eventually_lb_transform :
+      forall P Q,
+            eventually_in_lb step_async step_async_init lb_step_async P Q ->
+            eventually_in_lb step_dup step_async_init lb_step_dup
+            (fun s => P (revertSeq s)) (fun s => Q (revertSeq s)).
+
+ Then one can just use these lemmas to prove preserved properties of the lifted system.
+
+
 Results. Describe what you have achieved.  What remains to be done to make this a full-fledged research result?
 
 Lessons Learned. Reflect on the work you did, so you and I can learn from it.  How did your approach differ from what you originally proposed, and why?  What was more (or less) challenging than you expected?  What would you do differently next time?  What do you now see as the strengths/weaknesses of a tool like Coq, and what does that imply about possible research directions to pursue?
