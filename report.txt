@@ -1,0 +1,9 @@
+Recap the problem and motivation. This part should be brief, since we've already heard about this.
+
+Briefly describe your overall approach.  A small concrete example snippet or two would be very helpful.
+
+Results. Describe what you have achieved.  What remains to be done to make this a full-fledged research result?
+
+Lessons Learned. Reflect on the work you did, so you and I can learn from it.  How did your approach differ from what you originally proposed, and why?  What was more (or less) challenging than you expected?  What would you do differently next time?  What do you now see as the strengths/weaknesses of a tool like Coq, and what does that imply about possible research directions to pursue?
+
+Code.  Please submit all of your Coq code along with some brief documentation so I can relatively easily play with it and understand what's going on.
