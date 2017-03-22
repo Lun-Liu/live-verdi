@@ -1,9 +1,44 @@
 Recap the problem and motivation. This part should be brief, since we've already heard about this.
+=> Problem:
+   Verify liveness properties of distributed systems. Our goal is to solve this within the Verdi framework which already
+   provides a nice infrastructure for building distributed systems which are 'safe' by construction.
+=> Motivation:
+   Liveness properties are just as important as safety properties and it's critical that real systems do not get stuck and
+   guarantee some form of "progress". To our knowledge, there are very few tools which try to help verify liveness of systems.
+=> More details in proposal.pdf
+
 
 Briefly describe your overall approach.  A small concrete example snippet or two would be very helpful.
 
+
 Results. Describe what you have achieved.  What remains to be done to make this a full-fledged research result?
+=> Results:
+   + We identify richer types (for infinite traces) that base systems and transformers need to support to be able to reason
+     about liveness.
+   + Following the framework for safety, we propose basic liveness lemmas that transformers need to provide to simplify liveness
+     proofs of the transformed systems (also assuming proofs of liveness theorems for base systems).
+   + We show a concrete proof architecture for a distributed banking system with the SeqNum transformer (which handles duplicate
+     packets in network) applied to it.
+=> To-Dos:
+   + We `Admitted` a couple of intermediate lemmas for proving liveness of the base system.
+   + Although Verdi has LabeledNet which provides some types for reasoning about liveness, it's incomplete -- for example, it's
+     the semantics of a network which allows duplicate packets.
+   + None of the existing transformers have support for reasoning about infinite traces -- requires significant amount of work
+     to update types and validate all existing proofs.
+   + Since the basic network semantics and type-support is missing, we also `Admitted` the proof of liveness for the transformed
+     system, but we provide the complete proof architecture.
+=> Our (semi-beautiful) final presentation is available at:
+   https://docs.google.com/presentation/d/1Gva9LcFWhOhn__WtnmTYmezP-PEz6qz9IAAC9RGEi-o
+
 
 Lessons Learned. Reflect on the work you did, so you and I can learn from it.  How did your approach differ from what you originally proposed, and why?  What was more (or less) challenging than you expected?  What would you do differently next time?  What do you now see as the strengths/weaknesses of a tool like Coq, and what does that imply about possible research directions to pursue?
 
+
 Code.  Please submit all of your Coq code along with some brief documentation so I can relatively easily play with it and understand what's going on.
+=> https://github.com/pakkaliu/live-verdi
+
+----
+05/22/17
+
+Lun Liu
+Saswat Padhi
