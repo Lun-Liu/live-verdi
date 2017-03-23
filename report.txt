@@ -12,7 +12,8 @@ already heard about this.
 => More details in proposal.pdf
 
 
-Briefly describe your overall approach.  A small concrete example snippet or two would be very helpful.
+Briefly describe your overall approach.  A small concrete example snippet or
+two would be very helpful.
 
 As proposed in the porposal, our goal is to demonstrate verification of
 liveness properties of distributed systems using Verdi, by extending the
@@ -94,7 +95,8 @@ The liveness transform lemma can be formalized as
 
  Then one can just use these lemmas to prove preserved properties of the lifted system.
 
-Results. Describe what you have achieved.  What remains to be done to make this a full-fledged research result?
+Results. Describe what you have achieved.  What remains to be done to make this
+a full-fledged research result?
 => Results:
    + We identify richer types (for infinite traces) that base systems and
      transformers need to support to be able to reason about liveness.
@@ -120,10 +122,29 @@ Results. Describe what you have achieved.  What remains to be done to make this 
    https://docs.google.com/presentation/d/1Gva9LcFWhOhn__WtnmTYmezP-PEz6qz9IAAC9RGEi-o
 
 
-Lessons Learned. Reflect on the work you did, so you and I can learn from it.  How did your approach differ from what you originally proposed, and why?  What was more (or less) challenging than you expected?  What would you do differently next time?  What do you now see as the strengths/weaknesses of a tool like Coq, and what does that imply about possible research directions to pursue?
+Lessons Learned. Reflect on the work you did, so you and I can learn from it.
+How did your approach differ from what you originally proposed, and why?  What
+was more (or less) challenging than you expected?  What would you do
+differently next time?  What do you now see as the strengths/weaknesses of a
+tool like Coq, and what does that imply about possible research directions to
+pursue?
+
+Our biggest takeaway from this project is that Coq has a really steep learning
+curve and it's really hard to master coq well enough to be able to verify real
+world applications. To prove simple math theorems or lammas might not be to
+hard to begin with, but if someone really wants to use it to prove real-world
+applications he/ she will have to figure out the proper tactics (and sometimes
+to even write some of their own) to be efficient in proving in coq. 
+
+There really isn't much the programmers can do differently to deal with this
+problem, but to get their hands dirty and try to learn how to use different
+approaches and tactics. On the other hand, for tools like coq, it might be
+better if they can provide higher level abstractions to programmmers and allow
+them to do proofs in a higher level, without getting lost in sea of details.
 
 
-Code.  Please submit all of your Coq code along with some brief documentation so I can relatively easily play with it and understand what's going on.
+Code.  Please submit all of your Coq code along with some brief documentation
+so I can relatively easily play with it and understand what's going on.
 => https://github.com/pakkaliu/live-verdi
 
 ----
