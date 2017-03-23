@@ -1,22 +1,43 @@
-Recap the problem and motivation. This part should be brief, since we've already heard about this.
+Recap the problem and motivation. This part should be brief, since we've
+already heard about this.
 => Problem:
-   Verify liveness properties of distributed systems. Our goal is to solve this within the Verdi framework which already
-   provides a nice infrastructure for building distributed systems which are 'safe' by construction.
+   Verify liveness properties of distributed systems. Our goal is to solve this
+   within the Verdi framework which already provides a nice infrastructure for
+   building distributed systems which are 'safe' by construction.
 => Motivation:
-   Liveness properties are just as important as safety properties and it's critical that real systems do not get stuck and
-   guarantee some form of "progress". To our knowledge, there are very few tools which try to help verify liveness of systems.
+   Liveness properties are just as important as safety properties and it's
+   critical that real systems do not get stuck and guarantee some form of
+   "progress". To our knowledge, there are very few tools which try to help
+   verify liveness of systems.
 => More details in proposal.pdf
 
 
 Briefly describe your overall approach.  A small concrete example snippet or two would be very helpful.
 
-As proposed in the porposal, our goal is to demonstrate verification of liveness properties of distributed systems using Verdi, by extending the framework as needed. The general apporach is to implement the system in coq as Gallina functions, formalize and prove properties about it, then apply the transformer and prove the transformer can preserve the properties.
+As proposed in the porposal, our goal is to demonstrate verification of
+liveness properties of distributed systems using Verdi, by extending the
+framework as needed. The general apporach is to implement the system in coq as
+Gallina functions, formalize and prove properties about it, then apply the
+transformer and prove the transformer can preserve the properties.
 
-As a concrete example, we can have a simple banking system which has a server and an agent (the ATM machine). Agent can send requests to server and server will handle the incoming request, process the request and respond to agent. We can model this system as a distributed system that has two nodes. Nodes talk to each other by sending messages. They can also handle IO to/ from the system. (In this example only agent does the real IO). 
+As a concrete example, we can have a simple banking system which has a server
+and an agent (the ATM machine). Agent can send requests to server and server
+will handle the incoming request, process the request and respond to agent. We
+can model this system as a distributed system that has two nodes. Nodes talk to
+each other by sending messages. They can also handle IO to/ from the system.
+(In this example only agent does the real IO). 
 
-Network semantics decide how network and packets behave. For the simple network semantic, packets can be reordered but will never be lost or duplicated. Network semantics also define what kind of the internal information is visible. For example, if someone wants to reason about liveness properties, he/ she might as well use the Labeled network semantics which export traces of lables so it's easy to reason about transition of states.
+Network semantics decide how network and packets behave. For the simple network
+semantic, packets can be reordered but will never be lost or duplicated.
+Network semantics also define what kind of the internal information is visible.
+For example, if someone wants to reason about liveness properties, he/ she
+might as well use the Labeled network semantics which export traces of lables
+so it's easy to reason about transition of states.
 
-Safety properties of this system under the simple network semantic would be something like "an account can never have value less than minimum value", and we can formalize it as
+Safety properties of this system under the simple network semantic would be
+something like "an account can never have value less than minimum value", and
+we can formalize it as
+
     Theorem min_value_invariant :
         forall net tr,
               step_async_star step_async_init net tr ->
@@ -26,7 +47,9 @@ Safety properties of this system under the simple network semantic would be some
           true_in_reachable step_async step_async_init
           (fun net => min_value_invariant_network net).
 
-An example liveness property of this system is "if agent sends a request, it will eventually receive a response", we can formalize it as
+An example liveness property of this system is "if agent sends a request, it
+will eventually receive a response", we can formalize it as
+
   Theorem Waiting_eventually_Processed :
       forall s,
             initialized_eventseq s ->
@@ -34,9 +57,17 @@ An example liveness property of this system is "if agent sends a request, it wil
             now (occurred Waiting) s ->
             eventually (now (occurred Processed)) s.
 
-We can prove those systems under the simple network semantic. Then we can apply transformers to lift this system to a network semantics with faulting senarios.
+We can prove those systems under the simple network semantic. Then we can apply
+transformers to lift this system to a network semantics with faulting senarios.
 
-Transformers are basically wrappers that can be applied on base systems. Every transformer can handle specific faulting scenario of network in a standard way. For example, a sequence number transformer is to handle duplicate network packets. Whenever a packet is received, the transformer will first deal with the sequence numbering part then the handler of the base system will be called. Therefore, application level properties and transformer guarantee proofs can be orthogonal, and the programmers of distributed systems only have to prove the base system properties.
+Transformers are basically wrappers that can be applied on base systems. Every
+transformer can handle specific faulting scenario of network in a standard way.
+For example, a sequence number transformer is to handle duplicate network
+packets. Whenever a packet is received, the transformer will first deal with
+the sequence numbering part then the handler of the base system will be called.
+Therefore, application level properties and transformer guarantee proofs can be
+orthogonal, and the programmers of distributed systems only have to prove the
+base system properties.
 
 In the bank example, the safety transform lemma can be formalized as
 
@@ -65,19 +96,25 @@ The liveness transform lemma can be formalized as
 
 Results. Describe what you have achieved.  What remains to be done to make this a full-fledged research result?
 => Results:
-   + We identify richer types (for infinite traces) that base systems and transformers need to support to be able to reason
-     about liveness.
-   + Following the framework for safety, we propose basic liveness lemmas that transformers need to provide to simplify liveness
-     proofs of the transformed systems (also assuming proofs of liveness theorems for base systems).
-   + We show a concrete proof architecture for a distributed banking system with the SeqNum transformer (which handles duplicate
-     packets in network) applied to it.
+   + We identify richer types (for infinite traces) that base systems and
+     transformers need to support to be able to reason about liveness.
+   + Following the framework for safety, we propose basic liveness lemmas that
+     transformers need to provide to simplify liveness proofs of the transformed
+     systems (also assuming proofs of liveness theorems for base systems).
+   + We show a concrete proof architecture for a distributed banking system
+     with the SeqNum transformer (which handles duplicate packets in network)
+     applied to it.
 => To-Dos:
-   + We `Admitted` a couple of intermediate lemmas for proving liveness of the base system.
-   + Although Verdi has LabeledNet which provides some types for reasoning about liveness, it's incomplete -- for example, it's
-     the semantics of a network which allows duplicate packets.
-   + None of the existing transformers have support for reasoning about infinite traces -- requires significant amount of work
-     to update types and validate all existing proofs.
-   + Since the basic network semantics and type-support is missing, we also `Admitted` the proof of liveness for the transformed
+   + We `Admitted` a couple of intermediate lemmas for proving liveness of the
+     base system.
+   + Although Verdi has LabeledNet which provides some types for reasoning
+     about liveness, it's incomplete -- for example, it's the semantics of a
+     network which allows duplicate packets.
+   + None of the existing transformers have support for reasoning about
+     infinite traces -- requires significant amount of work to update types and
+     validate all existing proofs.
+   + Since the basic network semantics and type-support is missing, we also
+     `Admitted` the proof of liveness for the transformed
      system, but we provide the complete proof architecture.
 => Our (semi-beautiful) final presentation is available at:
    https://docs.google.com/presentation/d/1Gva9LcFWhOhn__WtnmTYmezP-PEz6qz9IAAC9RGEi-o
