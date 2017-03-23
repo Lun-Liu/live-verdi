@@ -129,18 +129,18 @@ differently next time?  What do you now see as the strengths/weaknesses of a
 tool like Coq, and what does that imply about possible research directions to
 pursue?
 
-Our biggest takeaway from this project is that Coq has a really steep learning
-curve and it's really hard to master coq well enough to be able to verify real
-world applications. To prove simple math theorems or lammas might not be to
-hard to begin with, but if someone really wants to use it to prove real-world
-applications he/ she will have to figure out the proper tactics (and sometimes
-to even write some of their own) to be efficient in proving in coq. 
+Our biggest takeaway from this project is that Coq has a steep learning curve
+and it's hard to master coq well enough to be able to verify real world
+applications. Proving simple theorems or lemmas might not be to hard to begin
+with, but if someone really wants to use it to prove real-world applications
+he/she will have to figure out the proper tactics (and sometimes to even write
+some of their own) to be efficient in proving in Coq.
 
-There really isn't much the programmers can do differently to deal with this
-problem, but to get their hands dirty and try to learn how to use different
-approaches and tactics. On the other hand, for tools like coq, it might be
-better if they can provide higher level abstractions to programmmers and allow
-them to do proofs in a higher level, without getting lost in sea of details.
+We feel, there really isn't much the programmers can do differently to deal with
+this problem, but to get their hands dirty and try to learn how to use different
+approaches and tactics. Making Coq proofs more readable and better proof
+automation would definitely help a wider adoption of Coq, and verification in
+general, by programmers.
 
 
 Code.  Please submit all of your Coq code along with some brief documentation
